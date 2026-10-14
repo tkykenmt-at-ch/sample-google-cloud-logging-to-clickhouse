@@ -88,6 +88,50 @@ The Japanese words in them come from the synthetic messages.
 
 ![Example dashboard](../images/dashboard.png)
 
+### Filtering by environment (project) and location (region)
+
+When one table holds logs from several projects, filter the project by a prefix match on `LogName` and the location by the resource labels (`ResourceAttributes`).
+
+- **Project**: filter on whether `LogName` starts with `projects/<project id>/` (`startsWith(LogName, 'projects/<project id>/')`). `logName` starts with `projects/`, `organizations/`, `folders/` or `billingAccounts/`; even if a project number was used when writing, the exported entry carries the project ID ([LogEntry](https://cloud.google.com/logging/docs/reference/v2/rest/v2/LogEntry)). For aggregated sinks, the official procedure filters projects with `logName:"projects/PROJECT_ID/logs/"` ([aggregated sinks](https://cloud.google.com/logging/docs/export/aggregated_sinks)). Including the trailing `/` keeps projects whose names share a prefix apart (`app-dev2` for `app-dev`).
+- **`ProjectId` column**: `resource.labels.project_id`, else the project in `logName`; the aggregate tables (L3 and noise counts) carry it too. Some logs carry the project number in their resource labels, so their `ProjectId` is a number: in the test environment, maintenance events (`maintenance.googleapis.com/maintenance_events`, `gke_nodepool` and `gce_instance`) and Apps Script logs, about 17,000 a day. In the aggregate tables one environment can appear under both its ID and its number. The label values stay as Cloud Logging wrote them, and the `ProjectId` rule is not changed.
+- **Region and zone**: not normalized into columns; the Cloud Logging resource labels stay as they are in `ResourceAttributes`. Cloud Logging defines the key name and granularity of the location per resource type ([Monitored resource types](https://cloud.google.com/logging/docs/api/v2/resource-list)), so normalizing it in an MV would need a fix for every new resource type. Handle it with an expression at query time instead.
+
+In the test environment's real logs (mostly GKE and GCE, one day), the location labels were:
+
+| Resource type (examples) | Key | Granularity |
+|---|---|---|
+| `k8s_container`, `k8s_node`, `k8s_cluster`, `k8s_pod`, `gke_nodepool`, `cloud_run_revision`, `cloud_run_job`, `gcs_bucket` | `location` | Region (`asia-northeast1`) or zone (`asia-northeast1-a`, e.g. containers of a zonal cluster). GCS multi-regions such as `US` |
+| `gce_instance`, `gce_disk` | `zone` | Zone |
+| `cloud_function` | `region` | Region (per the official list; none in the test environment's real logs) |
+| `service_account`, `project`, `pubsub_topic`, `pubsub_subscription`, `audited_resource` | None | Resources that belong to no region |
+
+**ClickStack search**: switch the search box to SQL and use prefix matches. GCE keeps its location under the `zone` key, so list it next to `location` to cover a region:
+
+```sql
+startsWith(LogName, 'projects/<project id>/')
+  AND (startsWith(ResourceAttributes['location'], 'asia-northeast1') OR startsWith(ResourceAttributes['zone'], 'asia-northeast1'))
+```
+
+`LogName` and `ProjectId` are both `LowCardinality`, so the comparison runs once per distinct value. On one day of the test environment (about 2.5 million rows), `ProjectId = ...` and `startsWith(LogName, ...)` differed by a few milliseconds (neither is in the sort key, so both read the same data). (verified)
+
+`key:value` in Lucene (the default search) is a substring match. `ResourceAttributes.location:asia-northeast1` conveniently matches the region and its zones, but `LogName:<project id>` also matches other projects whose names overlap, so use the SQL prefix match for projects.
+
+**SQL and dashboards** can aggregate by region with this expression (zones lose their `-a` suffix). Resources without a location label give an empty string. The same expression works as a Group By in ClickStack charts and tables. (verified)
+
+```sql
+SELECT
+    extract(LogName, '^projects/([^/]+)/') AS Project,
+    replaceRegexpOne(coalesce(nullIf(ResourceAttributes['location'], ''), nullIf(ResourceAttributes['zone'], ''),
+                              nullIf(ResourceAttributes['region'], ''), ''), '-[a-z]$', '') AS Region,
+    count() AS rows
+FROM gcl.gcl_logs_v1
+WHERE Timestamp > now() - INTERVAL 1 HOUR
+GROUP BY Project, Region
+ORDER BY rows DESC;
+```
+
+If you filter or aggregate by region often, put this expression into a derived column of your L1 (appendix A1 of [Operations](operations.md)) or into an L2.
+
 ## When to build an L2
 
 An L2 is optional.

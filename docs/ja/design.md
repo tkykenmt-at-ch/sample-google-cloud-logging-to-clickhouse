@@ -98,15 +98,17 @@ L2 の MV は L1 ではなく L0 を読みます。
 
 ### 環境（プロジェクト）と場所（リージョン）で絞る
 
-複数のプロジェクトのログを 1 つのテーブルに入れる場合は、プロジェクトを `LogName`（または `ProjectId`）で、場所をリソースのラベル（`ResourceAttributes`）で絞り込みます。
+複数のプロジェクトのログを 1 つのテーブルに入れる場合は、プロジェクトを `LogName` の前方一致で、場所をリソースのラベル（`ResourceAttributes`）で絞り込みます。
 
-- **プロジェクト**：`ProjectId` 列に入ります（`resource.labels.project_id`、なければ `logName` の `projects/<id>/`）。
-  集計テーブル（L3 とノイズの件数）も `ProjectId` を持ちます。
-  ただし、一部のログはリソースのラベルにプロジェクト番号を持つので、`ProjectId` が番号になります。
+- **プロジェクト**：`LogName` が `projects/<プロジェクト ID>/` で始まるかで絞ります（`startsWith(LogName, 'projects/<プロジェクト ID>/')`）。
+  `logName` は `projects/`、`organizations/`、`folders/`、`billingAccounts/` のどれかで始まり、書き込み時にプロジェクト番号を使っても、書き出されるときはプロジェクト ID になります（公式資料：[LogEntry](https://cloud.google.com/logging/docs/reference/v2/rest/v2/LogEntry)）。
+  集約シンクでも、公式の手順はプロジェクトの絞り込みに `logName:"projects/PROJECT_ID/logs/"` を使っています（公式資料：[aggregated sinks](https://cloud.google.com/logging/docs/export/aggregated_sinks)）。
+  末尾の `/` まで含めると、名前の前方が重なる別のプロジェクト（`app-dev` に対する `app-dev2` など）に一致しません。
+- **`ProjectId` 列**：`resource.labels.project_id`、なければ `logName` のプロジェクトを入れた列で、集計テーブル（L3 とノイズの件数）も持ちます。
+  ただし、リソースのラベルにプロジェクト番号を持つログがあり、その場合は `ProjectId` が番号になります。
   検証環境では、メンテナンス通知（`maintenance.googleapis.com/maintenance_events`、`gke_nodepool` と `gce_instance`）と Apps Script のログで、1 日に約 1.7 万件ありました。
-  `LogName`（`projects/<プロジェクト ID>/logs/...`）は、どのログでもプロジェクト ID を持っていました。
-  環境で漏れなく絞るときは `LogName` を使います。
   集計テーブルでは、同じ環境が ID と番号の 2 つの値に分かれて出ることがあります。
+  ラベルの値は Cloud Logging のまま残し、`ProjectId` の規則も変えません。
 - **リージョンとゾーン**：列にはそろえず、Cloud Logging のリソースのラベルのまま `ResourceAttributes` に入れています。
   場所を表すキーの名前と粒度は、Cloud Logging がリソースの種類ごとに決めています（公式資料：[Monitored resource types](https://cloud.google.com/logging/docs/api/v2/resource-list)）。
   そろえる処理を MV に持つと、リソースの種類が増えるたびに直す必要があるため、検索時に式で扱います。
@@ -120,16 +122,19 @@ L2 の MV は L1 ではなく L0 を読みます。
 | `cloud_function` | `region` | リージョン（公式の一覧による。検証環境の実ログにはなかった） |
 | `service_account`、`project`、`pubsub_topic`、`pubsub_subscription`、`audited_resource` | なし | リージョンに属さないリソース |
 
-**ClickStack の検索**（Lucene）では、属性を `ResourceAttributes.<キー>:<値>` で絞り込みます。
-`キー:値` は部分一致なので、`ResourceAttributes.location:asia-northeast1` はリージョンとそのゾーンの両方に一致します。
-GCE は `zone` キーなので、リージョン全体を見るときは両方を並べます。
+**ClickStack の検索**では、検索窓を SQL に切り替えて、前方一致で書きます。
+GCE は場所を `zone` キーに持つので、リージョン全体を見るときは `location` と並べます。
 
-```text
-LogName:<project id> AND (ResourceAttributes.location:asia-northeast1 OR ResourceAttributes.zone:asia-northeast1)
+```sql
+startsWith(LogName, 'projects/<project id>/')
+  AND (startsWith(ResourceAttributes['location'], 'asia-northeast1') OR startsWith(ResourceAttributes['zone'], 'asia-northeast1'))
 ```
 
-部分一致のため、`LogName:<project id>` は、名前の一部が重なるほかのプロジェクト（`app-dev` に対する `app-dev2` など）にも一致します。
-確実に絞るときは、検索窓を SQL に切り替えて、`LogName LIKE 'projects/<project id>/%' AND ResourceAttributes['location'] = 'asia-northeast1'` のように書きます。
+`LogName` と `ProjectId` はどちらも `LowCardinality` なので、比較は種類の数だけで済みます。
+検証環境の 1 日分（約 250 万行）では、`ProjectId = ...` と `startsWith(LogName, ...)` の差は数ミリ秒でした（どちらも並び順に入っていないので、読む量は同じ）。（確認済み）
+
+Lucene（既定の検索）の `キー:値` は部分一致です。
+`ResourceAttributes.location:asia-northeast1` はリージョンとそのゾーンに一致して便利ですが、`LogName:<project id>` は名前の一部が重なる別のプロジェクトにも一致するので、プロジェクトの絞り込みには SQL の前方一致を使います。
 
 **SQL とダッシュボード**では、次の式でリージョンにそろえて集計できます（ゾーンは末尾の `-a` などを落とす）。
 場所のラベルを持たないリソースは空文字になります。

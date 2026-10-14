@@ -90,9 +90,10 @@ The Japanese words in them come from the synthetic messages.
 
 ### Filtering by environment (project) and location (region)
 
-When one table holds logs from several projects, filter the project by `LogName` (or `ProjectId`) and the location by the resource labels (`ResourceAttributes`).
+When one table holds logs from several projects, filter the project by a prefix match on `LogName` and the location by the resource labels (`ResourceAttributes`).
 
-- **Project**: `ProjectId` (from `resource.labels.project_id`, else `projects/<id>/` in `logName`). The aggregate tables (L3 and noise counts) carry `ProjectId` too. Some logs carry the project number in their resource labels, so their `ProjectId` is a number: in the test environment, maintenance events (`maintenance.googleapis.com/maintenance_events`, `gke_nodepool` and `gce_instance`) and Apps Script logs, about 17,000 a day. `LogName` (`projects/<project id>/logs/...`) carried the project ID for every log; use it to filter by environment without gaps. In the aggregate tables one environment can appear under both its ID and its number.
+- **Project**: filter on whether `LogName` starts with `projects/<project id>/` (`startsWith(LogName, 'projects/<project id>/')`). `logName` starts with `projects/`, `organizations/`, `folders/` or `billingAccounts/`; even if a project number was used when writing, the exported entry carries the project ID ([LogEntry](https://cloud.google.com/logging/docs/reference/v2/rest/v2/LogEntry)). For aggregated sinks, the official procedure filters projects with `logName:"projects/PROJECT_ID/logs/"` ([aggregated sinks](https://cloud.google.com/logging/docs/export/aggregated_sinks)). Including the trailing `/` keeps projects whose names share a prefix apart (`app-dev2` for `app-dev`).
+- **`ProjectId` column**: `resource.labels.project_id`, else the project in `logName`; the aggregate tables (L3 and noise counts) carry it too. Some logs carry the project number in their resource labels, so their `ProjectId` is a number: in the test environment, maintenance events (`maintenance.googleapis.com/maintenance_events`, `gke_nodepool` and `gce_instance`) and Apps Script logs, about 17,000 a day. In the aggregate tables one environment can appear under both its ID and its number. The label values stay as Cloud Logging wrote them, and the `ProjectId` rule is not changed.
 - **Region and zone**: not normalized into columns; the Cloud Logging resource labels stay as they are in `ResourceAttributes`. Cloud Logging defines the key name and granularity of the location per resource type ([Monitored resource types](https://cloud.google.com/logging/docs/api/v2/resource-list)), so normalizing it in an MV would need a fix for every new resource type. Handle it with an expression at query time instead.
 
 In the test environment's real logs (mostly GKE and GCE, one day), the location labels were:
@@ -104,13 +105,16 @@ In the test environment's real logs (mostly GKE and GCE, one day), the location 
 | `cloud_function` | `region` | Region (per the official list; none in the test environment's real logs) |
 | `service_account`, `project`, `pubsub_topic`, `pubsub_subscription`, `audited_resource` | None | Resources that belong to no region |
 
-**ClickStack search** (Lucene) filters attributes as `ResourceAttributes.<key>:<value>`. `key:value` is a substring match, so `ResourceAttributes.location:asia-northeast1` matches the region and its zones. GCE uses the `zone` key, so list both to cover a region:
+**ClickStack search**: switch the search box to SQL and use prefix matches. GCE keeps its location under the `zone` key, so list it next to `location` to cover a region:
 
-```text
-LogName:<project id> AND (ResourceAttributes.location:asia-northeast1 OR ResourceAttributes.zone:asia-northeast1)
+```sql
+startsWith(LogName, 'projects/<project id>/')
+  AND (startsWith(ResourceAttributes['location'], 'asia-northeast1') OR startsWith(ResourceAttributes['zone'], 'asia-northeast1'))
 ```
 
-Being a substring match, `LogName:<project id>` also matches projects whose names overlap (`app-dev2` for `app-dev`). For an exact filter, switch the search box to SQL and write, for example, `LogName LIKE 'projects/<project id>/%' AND ResourceAttributes['location'] = 'asia-northeast1'`.
+`LogName` and `ProjectId` are both `LowCardinality`, so the comparison runs once per distinct value. On one day of the test environment (about 2.5 million rows), `ProjectId = ...` and `startsWith(LogName, ...)` differed by a few milliseconds (neither is in the sort key, so both read the same data). (verified)
+
+`key:value` in Lucene (the default search) is a substring match. `ResourceAttributes.location:asia-northeast1` conveniently matches the region and its zones, but `LogName:<project id>` also matches other projects whose names overlap, so use the SQL prefix match for projects.
 
 **SQL and dashboards** can aggregate by region with this expression (zones lose their `-a` suffix). Resources without a location label give an empty string. The same expression works as a Group By in ClickStack charts and tables. (verified)
 

@@ -83,3 +83,15 @@ FROM gcl.gcl_landing_v1
 WHERE _publish_time >= now() - INTERVAL 6 HOUR AND _publish_time < toStartOfHour(now())
 GROUP BY hour
 ORDER BY hour;
+
+-- 10. Records ClickPipes could not insert (the error table is created and managed by ClickPipes, kept 7 days).
+--     L0 holds only the virtual columns of each message, so this normally stays empty. record_value holds
+--     the whole message: the project (environment) comes from its logName.
+--     https://clickhouse.com/docs/integrations/clickpipes (error table: whole invalid message, 7-day TTL).
+SELECT toStartOfHour(error_timestamp) AS hour, error_type,
+       extract(JSONExtractString(record_value, 'logName'), '^projects/([^/]+)/') AS ProjectId,
+       count() AS errors, any(error_msg) AS sample_error
+FROM gcl.gcl_landing_v1_clickpipes_error
+WHERE error_timestamp > now() - INTERVAL 7 DAY
+GROUP BY hour, error_type, ProjectId
+ORDER BY hour DESC;

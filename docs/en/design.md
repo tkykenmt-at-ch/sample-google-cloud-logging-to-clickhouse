@@ -88,6 +88,46 @@ The Japanese words in them come from the synthetic messages.
 
 ![Example dashboard](../images/dashboard.png)
 
+### Filtering by environment (project) and location (region)
+
+When one table holds logs from several projects, filter the project by `LogName` (or `ProjectId`) and the location by the resource labels (`ResourceAttributes`).
+
+- **Project**: `ProjectId` (from `resource.labels.project_id`, else `projects/<id>/` in `logName`). The aggregate tables (L3 and noise counts) carry `ProjectId` too. Some logs carry the project number in their resource labels, so their `ProjectId` is a number: in the test environment, maintenance events (`maintenance.googleapis.com/maintenance_events`, `gke_nodepool` and `gce_instance`) and Apps Script logs, about 17,000 a day. `LogName` (`projects/<project id>/logs/...`) carried the project ID for every log; use it to filter by environment without gaps. In the aggregate tables one environment can appear under both its ID and its number.
+- **Region and zone**: not normalized into columns; the Cloud Logging resource labels stay as they are in `ResourceAttributes`. Cloud Logging defines the key name and granularity of the location per resource type ([Monitored resource types](https://cloud.google.com/logging/docs/api/v2/resource-list)), so normalizing it in an MV would need a fix for every new resource type. Handle it with an expression at query time instead.
+
+In the test environment's real logs (mostly GKE and GCE, one day), the location labels were:
+
+| Resource type (examples) | Key | Granularity |
+|---|---|---|
+| `k8s_container`, `k8s_node`, `k8s_cluster`, `k8s_pod`, `gke_nodepool`, `cloud_run_revision`, `cloud_run_job`, `gcs_bucket` | `location` | Region (`asia-northeast1`) or zone (`asia-northeast1-a`, e.g. containers of a zonal cluster). GCS multi-regions such as `US` |
+| `gce_instance`, `gce_disk` | `zone` | Zone |
+| `cloud_function` | `region` | Region (per the official list; none in the test environment's real logs) |
+| `service_account`, `project`, `pubsub_topic`, `pubsub_subscription`, `audited_resource` | None | Resources that belong to no region |
+
+**ClickStack search** (Lucene) filters attributes as `ResourceAttributes.<key>:<value>`. `key:value` is a substring match, so `ResourceAttributes.location:asia-northeast1` matches the region and its zones. GCE uses the `zone` key, so list both to cover a region:
+
+```text
+LogName:<project id> AND (ResourceAttributes.location:asia-northeast1 OR ResourceAttributes.zone:asia-northeast1)
+```
+
+Being a substring match, `LogName:<project id>` also matches projects whose names overlap (`app-dev2` for `app-dev`). For an exact filter, switch the search box to SQL and write, for example, `LogName LIKE 'projects/<project id>/%' AND ResourceAttributes['location'] = 'asia-northeast1'`.
+
+**SQL and dashboards** can aggregate by region with this expression (zones lose their `-a` suffix). Resources without a location label give an empty string. The same expression works as a Group By in ClickStack charts and tables. (verified)
+
+```sql
+SELECT
+    extract(LogName, '^projects/([^/]+)/') AS Project,
+    replaceRegexpOne(coalesce(nullIf(ResourceAttributes['location'], ''), nullIf(ResourceAttributes['zone'], ''),
+                              nullIf(ResourceAttributes['region'], ''), ''), '-[a-z]$', '') AS Region,
+    count() AS rows
+FROM gcl.gcl_logs_v1
+WHERE Timestamp > now() - INTERVAL 1 HOUR
+GROUP BY Project, Region
+ORDER BY rows DESC;
+```
+
+If you filter or aggregate by region often, put this expression into a derived column of your L1 (appendix A1 of [Operations](operations.md)) or into an L2.
+
 ## When to build an L2
 
 An L2 is optional.

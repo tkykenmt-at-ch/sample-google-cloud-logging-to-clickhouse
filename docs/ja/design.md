@@ -96,6 +96,59 @@ L2 の MV は L1 ではなく L0 を読みます。
 
 ![ダッシュボードの例](../images/dashboard.png)
 
+### 環境（プロジェクト）と場所（リージョン）で絞る
+
+複数のプロジェクトのログを 1 つのテーブルに入れる場合は、プロジェクトを `LogName`（または `ProjectId`）で、場所をリソースのラベル（`ResourceAttributes`）で絞り込みます。
+
+- **プロジェクト**：`ProjectId` 列に入ります（`resource.labels.project_id`、なければ `logName` の `projects/<id>/`）。
+  集計テーブル（L3 とノイズの件数）も `ProjectId` を持ちます。
+  ただし、一部のログはリソースのラベルにプロジェクト番号を持つので、`ProjectId` が番号になります。
+  検証環境では、メンテナンス通知（`maintenance.googleapis.com/maintenance_events`、`gke_nodepool` と `gce_instance`）と Apps Script のログで、1 日に約 1.7 万件ありました。
+  `LogName`（`projects/<プロジェクト ID>/logs/...`）は、どのログでもプロジェクト ID を持っていました。
+  環境で漏れなく絞るときは `LogName` を使います。
+  集計テーブルでは、同じ環境が ID と番号の 2 つの値に分かれて出ることがあります。
+- **リージョンとゾーン**：列にはそろえず、Cloud Logging のリソースのラベルのまま `ResourceAttributes` に入れています。
+  場所を表すキーの名前と粒度は、Cloud Logging がリソースの種類ごとに決めています（公式資料：[Monitored resource types](https://cloud.google.com/logging/docs/api/v2/resource-list)）。
+  そろえる処理を MV に持つと、リソースの種類が増えるたびに直す必要があるため、検索時に式で扱います。
+
+検証環境の実ログ（GKE と GCE が中心、1 日分）では、場所のラベルは次のとおりでした。
+
+| リソースの種類（例） | キー | 値の粒度 |
+|---|---|---|
+| `k8s_container`、`k8s_node`、`k8s_cluster`、`k8s_pod`、`gke_nodepool`、`cloud_run_revision`、`cloud_run_job`、`gcs_bucket` | `location` | リージョン（`asia-northeast1`）またはゾーン（`asia-northeast1-a`。ゾーンクラスタのコンテナなど）。GCS のマルチリージョンは `US` など |
+| `gce_instance`、`gce_disk` | `zone` | ゾーン |
+| `cloud_function` | `region` | リージョン（公式の一覧による。検証環境の実ログにはなかった） |
+| `service_account`、`project`、`pubsub_topic`、`pubsub_subscription`、`audited_resource` | なし | リージョンに属さないリソース |
+
+**ClickStack の検索**（Lucene）では、属性を `ResourceAttributes.<キー>:<値>` で絞り込みます。
+`キー:値` は部分一致なので、`ResourceAttributes.location:asia-northeast1` はリージョンとそのゾーンの両方に一致します。
+GCE は `zone` キーなので、リージョン全体を見るときは両方を並べます。
+
+```text
+LogName:<project id> AND (ResourceAttributes.location:asia-northeast1 OR ResourceAttributes.zone:asia-northeast1)
+```
+
+部分一致のため、`LogName:<project id>` は、名前の一部が重なるほかのプロジェクト（`app-dev` に対する `app-dev2` など）にも一致します。
+確実に絞るときは、検索窓を SQL に切り替えて、`LogName LIKE 'projects/<project id>/%' AND ResourceAttributes['location'] = 'asia-northeast1'` のように書きます。
+
+**SQL とダッシュボード**では、次の式でリージョンにそろえて集計できます（ゾーンは末尾の `-a` などを落とす）。
+場所のラベルを持たないリソースは空文字になります。
+ClickStack のグラフや表の Group By にも、この式をそのまま書けます。（確認済み）
+
+```sql
+SELECT
+    extract(LogName, '^projects/([^/]+)/') AS Project,
+    replaceRegexpOne(coalesce(nullIf(ResourceAttributes['location'], ''), nullIf(ResourceAttributes['zone'], ''),
+                              nullIf(ResourceAttributes['region'], ''), ''), '-[a-z]$', '') AS Region,
+    count() AS rows
+FROM gcl.gcl_logs_v1
+WHERE Timestamp > now() - INTERVAL 1 HOUR
+GROUP BY Project, Region
+ORDER BY rows DESC;
+```
+
+リージョンで頻繁に絞る、または集計する場合は、この式を自分の環境の L1 の派生列（[運用](operations.md) の付録 A1）や L2 に入れます。
+
 ## L2 を作るかどうかの判断
 
 L2 は任意です。

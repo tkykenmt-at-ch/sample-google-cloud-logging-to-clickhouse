@@ -19,6 +19,7 @@ Check the following regularly with `verify/checks.sql`.
 | Loss anywhere on the path | Check 9 and Cloud Monitoring `logging.googleapis.com/exports/log_entry_count` | Differs from the sink's export count by more than 1% (normally under 0.1%) | Check the pipe state, the Pub/Sub backlog, and sink export errors |
 | Stuck batches | Check 2 | Greater than 0 | "Detecting and recovering MV failures" |
 | Failed inserts | Check 6 | One or more | "Detecting and recovering MV failures" |
+| Messages ClickPipes could not insert | Check 10 (the ClickPipes error table `gcl_landing_v1_clickpipes_error`, kept 7 days) | One or more (L0 takes only the virtual columns, so normally 0) | Read `error_msg` for the cause. The whole message stays in `record_value`; its `logName` gives the project (environment) |
 | Ingest latency | Check 1 | p99 above 10 s and growing | Add pipe replicas. Also check the age of unacked Pub/Sub messages |
 | Duplicates | Check 3 | Increased after a failure or pause | Deduplicate in queries, or rebuild the day with appendix A2 |
 | Pipe state | `clickhousectl cloud clickpipe get <service id> <pipe id>` (pipe ID from `terraform output clickpipe_id`) | Failed | "Detecting and recovering MV failures" |

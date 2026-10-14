@@ -3,7 +3,8 @@
 # Generates synthetic LogEntry messages, loads them into L0 the way the ClickPipe does
 # (raw message + Pub/Sub virtual columns), and checks L1, the rollup (L3), the noise counts and
 # the optional L2 example (sql/examples/l2_audit_events_v1.sql) including its backfill from L0,
-# and that the stuck-row check of verify/checks.sql ignores rows dropped by the noise rule.
+# that the stuck-row check of verify/checks.sql ignores rows dropped by the noise rule, and that the
+# rollups keep projects apart (per-project totals match L1 and L0).
 # Usage: verify/local_e2e.sh [entries]    Needs: clickhouse (local), python3.
 # WORKDIR=<dir> keeps the database there for exploring: clickhouse local --path <dir>/db
 set -euo pipefail
@@ -57,7 +58,16 @@ WITH
   (SELECT count() FROM gcl.gcl_landing_v1
    WHERE _message_id NOT IN (SELECT MessageId FROM gcl.gcl_logs_v1)
      AND JSONExtractString(_raw_message, 'protoPayload', 'methodName') != 'io.k8s.coordination.v1.leases.update') AS stuck,
-  (SELECT countIf(match(ServiceName, '^[0-9]+$')) FROM gcl.gcl_logs_v1 WHERE ResourceType = 'gce_instance') AS gce_numeric
+  (SELECT countIf(match(ServiceName, '^[0-9]+$')) FROM gcl.gcl_logs_v1 WHERE ResourceType = 'gce_instance') AS gce_numeric,
+  -- the rollups keep projects apart: per-project totals match their sources
+  (SELECT uniqExact(ProjectId) FROM gcl.gcl_logs_v1) AS projects,
+  (SELECT count() FROM (SELECT ProjectId, count() AS c FROM gcl.gcl_logs_v1 GROUP BY ProjectId) AS a
+   FULL JOIN (SELECT ProjectId, sum(Cnt) AS c FROM gcl.gcl_logs_1m_v1 GROUP BY ProjectId) AS b USING ProjectId
+   WHERE a.c != b.c OR ProjectId = '') AS l3_project_diff,
+  (SELECT count() FROM (SELECT extract(JSONExtractString(_raw_message, 'logName'), '^projects/([^/]+)/') AS ProjectId, count() AS c
+                        FROM gcl.gcl_landing_v1 WHERE position(_raw_message, 'io.k8s.coordination.v1.leases.update') > 0 GROUP BY ProjectId) AS a
+   FULL JOIN (SELECT ProjectId, sum(Cnt) AS c FROM gcl.gcl_noise_1m_v1 GROUP BY ProjectId) AS b USING ProjectId
+   WHERE a.c != b.c OR ProjectId = '') AS noise_project_diff
 SELECT check, expected, actual, if(expected = actual, 'PASS', 'FAIL') AS result FROM (
   SELECT 1 AS n, 'L0 rows = generated'    AS check, toUInt64($N * 2) AS expected, l0 AS actual UNION ALL
   SELECT 2, 'L1 rows = L0 rows - noise',          l0 - lease_l0,       l1 UNION ALL
@@ -69,7 +79,10 @@ SELECT check, expected, actual, if(expected = actual, 'PASS', 'FAIL') AS result 
   SELECT 8, 'No 1970 timestamps',                 toUInt64(0),                   ts_1970 UNION ALL
   SELECT 9, 'Japanese search (index) = LIKE',     ja_like,             ja_index UNION ALL
   SELECT 10, 'Stuck-row check ignores noise',     toUInt64(0),                   stuck UNION ALL
-  SELECT 11, 'GCE ServiceName is the VM name',    toUInt64(0),                   gce_numeric
+  SELECT 11, 'GCE ServiceName is the VM name',    toUInt64(0),                   gce_numeric UNION ALL
+  SELECT 12, 'Several projects in the input',     toUInt64(projects > 1),        toUInt64(1) UNION ALL
+  SELECT 13, 'L3 per project = L1 per project',   toUInt64(0),                   l3_project_diff UNION ALL
+  SELECT 14, 'Noise per project = L0 per project', toUInt64(0),                  noise_project_diff
 )
 ORDER BY n
 FORMAT PrettyCompactMonoBlock"

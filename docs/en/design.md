@@ -294,8 +294,8 @@ MergeTree, partitioned by publish date, `ORDER BY _publish_time`, 7-day TTL (`la
 
 | Table | Reads | Columns | Engine |
 |---|---|---|---|
-| `gcl_logs_1m_v1` (L3, `sql/40_rollup_1m_v1.sql`) | L1 | `Minute`, `ServiceName`, `SeverityText`, `HttpStatus`, `Cnt` | AggregatingMergeTree |
-| `gcl_noise_1m_v1` (noise counts, `sql/50_noise_rollup_v1.sql`) | L0 | `Minute`, `Rule`, `ServiceName`, `Principal`, `Cnt` | AggregatingMergeTree |
+| `gcl_logs_1m_v1` (L3, `sql/40_rollup_1m_v1.sql`) | L1 | `Minute`, `ProjectId`, `ServiceName`, `SeverityText`, `HttpStatus`, `Cnt` | AggregatingMergeTree |
+| `gcl_noise_1m_v1` (noise counts, `sql/50_noise_rollup_v1.sql`) | L0 | `Minute`, `ProjectId`, `Rule`, `ServiceName`, `Principal`, `Cnt` | AggregatingMergeTree |
 
 L2 examples are in `sql/examples/` (`audit_events_v1` sorted by principal, `gke_upgrades_v1` for GKE upgrade notifications).
 

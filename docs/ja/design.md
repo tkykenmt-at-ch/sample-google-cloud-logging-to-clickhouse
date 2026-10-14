@@ -346,8 +346,8 @@ MergeTree、公開日でパーティション、`ORDER BY _publish_time`、保�
 
 | テーブル | 元 | 列 | エンジン |
 |---|---|---|---|
-| `gcl_logs_1m_v1`（L3、`sql/40_rollup_1m_v1.sql`） | L1 | `Minute`、`ServiceName`、`SeverityText`、`HttpStatus`、`Cnt` | AggregatingMergeTree |
-| `gcl_noise_1m_v1`（ノイズの件数、`sql/50_noise_rollup_v1.sql`） | L0 | `Minute`、`Rule`、`ServiceName`、`Principal`、`Cnt` | AggregatingMergeTree |
+| `gcl_logs_1m_v1`（L3、`sql/40_rollup_1m_v1.sql`） | L1 | `Minute`、`ProjectId`、`ServiceName`、`SeverityText`、`HttpStatus`、`Cnt` | AggregatingMergeTree |
+| `gcl_noise_1m_v1`（ノイズの件数、`sql/50_noise_rollup_v1.sql`） | L0 | `Minute`、`ProjectId`、`Rule`、`ServiceName`、`Principal`、`Cnt` | AggregatingMergeTree |
 
 L2 の例は `sql/examples/` にあります（`audit_events_v1` は操作者の順、`gke_upgrades_v1` は GKE のアップグレード通知）。
 

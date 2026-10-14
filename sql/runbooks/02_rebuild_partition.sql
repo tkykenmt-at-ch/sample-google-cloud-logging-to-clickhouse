@@ -30,10 +30,10 @@ ALTER TABLE gcl.gcl_logs_v1 REPLACE PARTITION ID '{{PART}}' FROM gcl.gcl_logs_v1
 
 -- Rebuild the matching rollup partition from the rebuilt rows.
 CREATE TABLE gcl.gcl_logs_1m_v1_rebuild AS gcl.gcl_logs_1m_v1;
-INSERT INTO gcl.gcl_logs_1m_v1_rebuild
-SELECT toStartOfMinute(Timestamp) AS Minute, ServiceName, SeverityText, HttpStatus, count() AS Cnt
+INSERT INTO gcl.gcl_logs_1m_v1_rebuild (Minute, ProjectId, ServiceName, SeverityText, HttpStatus, Cnt)
+SELECT toStartOfMinute(Timestamp) AS Minute, ProjectId, ServiceName, SeverityText, HttpStatus, count() AS Cnt
 FROM gcl.gcl_logs_v1_rebuild
-GROUP BY Minute, ServiceName, SeverityText, HttpStatus;
+GROUP BY Minute, ProjectId, ServiceName, SeverityText, HttpStatus;
 ALTER TABLE gcl.gcl_logs_1m_v1 REPLACE PARTITION ID '{{PART}}' FROM gcl.gcl_logs_1m_v1_rebuild;
 
 DROP TABLE gcl.gcl_logs_1m_v1_rebuild;

@@ -110,7 +110,9 @@ SELECT
         res_type != '',                  res_type,
         'unknown') AS ServiceName,
     res_type AS ResourceType,
-    if(res_labels['project_id'] != '', res_labels['project_id'], extract(log_name, '^projects/([^/]+)/')) AS ProjectId,
+    -- logName first: exports always carry the project ID there, while some logs put the project number in
+    -- resource.labels.project_id (maintenance events, Apps Script). The label covers organization/folder logs.
+    if(startsWith(log_name, 'projects/'), extract(log_name, '^projects/([^/]+)/'), res_labels['project_id']) AS ProjectId,
     log_name AS LogName,
     log_id AS LogId,
     body AS Body,

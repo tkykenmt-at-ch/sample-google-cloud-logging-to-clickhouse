@@ -2,7 +2,7 @@
 -- per-minute counts. L0 still holds the raw rows for its TTL, so the decision can be reverted
 -- (rebuild from L0) and the rate stays visible (a stopped heartbeat is itself a signal).
 -- The rule lives here and in the WHERE of MV1 (sql/30): keep both in sync.
--- ProjectId uses the same rule as MV1 (resource.labels.project_id, else the project in logName). It is
+-- ProjectId uses the same rule as MV1 (the project in logName, else resource.labels.project_id). It is
 -- last in ORDER BY and out of PRIMARY KEY, so that an existing table reaches the same definition with
 -- ADD COLUMN AFTER Minute + MODIFY ORDER BY.
 CREATE TABLE IF NOT EXISTS gcl.gcl_noise_1m_v1
@@ -33,7 +33,7 @@ WITH
     parseDateTime64BestEffortOrZero(tupleElement(e, 'timestamp'), 3, 'UTC') AS ts
 SELECT
     toStartOfMinute(if(ts > toDateTime64('2000-01-01 00:00:00', 3, 'UTC'), ts, _publish_time)) AS Minute,
-    if(res_labels['project_id'] != '', res_labels['project_id'], extract(tupleElement(e, 'logName'), '^projects/([^/]+)/')) AS ProjectId,
+    if(startsWith(tupleElement(e, 'logName'), 'projects/'), extract(tupleElement(e, 'logName'), '^projects/([^/]+)/'), res_labels['project_id']) AS ProjectId,
     'k8s-lease-update' AS Rule,
     tupleElement(p, 'serviceName') AS ServiceName,
     tupleElement(tupleElement(p, 'authenticationInfo'), 'principalEmail') AS Principal,

@@ -104,11 +104,12 @@ L2 の MV は L1 ではなく L0 を読みます。
   `logName` は `projects/`、`organizations/`、`folders/`、`billingAccounts/` のどれかで始まり、書き込み時にプロジェクト番号を使っても、書き出されるときはプロジェクト ID になります（公式資料：[LogEntry](https://cloud.google.com/logging/docs/reference/v2/rest/v2/LogEntry)）。
   集約シンクでも、公式の手順はプロジェクトの絞り込みに `logName:"projects/PROJECT_ID/logs/"` を使っています（公式資料：[aggregated sinks](https://cloud.google.com/logging/docs/export/aggregated_sinks)）。
   末尾の `/` まで含めると、名前の前方が重なる別のプロジェクト（`app-dev` に対する `app-dev2` など）に一致しません。
-- **`ProjectId` 列**：`resource.labels.project_id`、なければ `logName` のプロジェクトを入れた列で、集計テーブル（L3 とノイズの件数）も持ちます。
-  ただし、リソースのラベルにプロジェクト番号を持つログがあり、その場合は `ProjectId` が番号になります。
+- **`ProjectId` 列**：`logName` のプロジェクト ID を入れた列で、集計テーブル（L3 とノイズの件数）も持ちます。
+  集計テーブルには `LogName` がないので、プロジェクトごとの集計はこの列で行います。
+  `logName` が `projects/` で始まらないログ（組織やフォルダのログ）だけは、`resource.labels.project_id` を使います。
+  リソースのラベルを先に見ないのは、ラベルにプロジェクト番号を持つログがあり、同じ環境が ID と番号の 2 つの値に分かれるためです。
   検証環境では、メンテナンス通知（`maintenance.googleapis.com/maintenance_events`、`gke_nodepool` と `gce_instance`）と Apps Script のログで、1 日に約 1.7 万件ありました。
-  集計テーブルでは、同じ環境が ID と番号の 2 つの値に分かれて出ることがあります。
-  ラベルの値は Cloud Logging のまま残し、`ProjectId` の規則も変えません。
+  ラベルの値は Cloud Logging のまま `ResourceAttributes` に残します。
 - **リージョンとゾーン**：列にはそろえず、Cloud Logging のリソースのラベルのまま `ResourceAttributes` に入れています。
   場所を表すキーの名前と粒度は、Cloud Logging がリソースの種類ごとに決めています（公式資料：[Monitored resource types](https://cloud.google.com/logging/docs/api/v2/resource-list)）。
   そろえる処理を MV に持つと、リソースの種類が増えるたびに直す必要があるため、検索時に式で扱います。

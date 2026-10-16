@@ -26,7 +26,7 @@ WITH
             '') AS rule
 SELECT
     toStartOfMinute(if(ts > toDateTime64('2000-01-01 00:00:00', 3, 'UTC'), ts, _publish_time)) AS Minute,
-    if(startsWith(tupleElement(e, 'logName'), 'projects/'), extract(tupleElement(e, 'logName'), '^projects/([^/]+)/'), res_labels['project_id']) AS ProjectId,
+    if(startsWith(tupleElement(e, 'logName'), 'projects/'), extract(tupleElement(e, 'logName'), '^projects/([^/]+)/'), extract(tupleElement(e, 'logName'), '^([^/]+/[^/]+)/')) AS ProjectId,
     rule AS Rule,
     tupleElement(p, 'serviceName') AS ServiceName,
     tupleElement(tupleElement(p, 'authenticationInfo'), 'principalEmail') AS Principal,

@@ -89,7 +89,10 @@ ORDER BY hour;
 --     the whole message: the project (environment) comes from its logName.
 --     https://clickhouse.com/docs/integrations/clickpipes (error table: whole invalid message, 7-day TTL).
 SELECT toStartOfHour(error_timestamp) AS hour, error_type,
-       extract(JSONExtractString(record_value, 'logName'), '^projects/([^/]+)/') AS ProjectId,
+       -- same rule as MV1 (empty when record_value is not a LogEntry)
+       if(startsWith(JSONExtractString(record_value, 'logName'), 'projects/'),
+          extract(JSONExtractString(record_value, 'logName'), '^projects/([^/]+)/'),
+          extract(JSONExtractString(record_value, 'logName'), '^([^/]+/[^/]+)/')) AS ProjectId,
        count() AS errors, any(error_msg) AS sample_error
 FROM gcl.gcl_landing_v1_clickpipes_error
 WHERE error_timestamp > now() - INTERVAL 7 DAY

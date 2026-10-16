@@ -40,9 +40,9 @@ SELECT
     if(ts > toDateTime64('2000-01-01 00:00:00', 9, 'UTC'), ts, toDateTime64(_publish_time, 9, 'UTC')) AS Timestamp,
     _publish_time AS PublishTime,
     _message_id AS MessageId,
-    if(tupleElement(tupleElement(e, 'resource'), 'labels')['project_id'] != '',
-       tupleElement(tupleElement(e, 'resource'), 'labels')['project_id'],
-       extract(tupleElement(e, 'logName'), '^projects/([^/]+)/')) AS ProjectId,
+    -- Same rule as MV1: from logName only
+    if(startsWith(tupleElement(e, 'logName'), 'projects/'), extract(tupleElement(e, 'logName'), '^projects/([^/]+)/'),
+       extract(tupleElement(e, 'logName'), '^([^/]+/[^/]+)/')) AS ProjectId,
     tupleElement(tupleElement(p, 'authenticationInfo'), 'principalEmail') AS Principal,
     tupleElement(p, 'serviceName') AS ServiceName,
     tupleElement(p, 'methodName') AS MethodName,

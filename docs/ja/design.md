@@ -447,6 +447,8 @@ LogEntry の共通項目は `JSONExtract(_raw_message, 'Tuple(...)')` でまと�
 | GKE のコントロールプレーン | `control-plane/`コンポーネント名 |
 | 上記以外 | リソースの種類/ログ ID（例 `k8s_node/kubelet`） |
 
+GCE のログには、インスタンス名のラベル（`compute.googleapis.com/resource_name`）を持たないものがあり（検証環境では `shielded_vm_integrity`、6 時間で 1,663 件中 4 件）、同じ VM が名前とインスタンス ID の 2 つの `ServiceName` に分かれます。
+
 **本文（Body）**
 
 次の順で最初に見つかったものを入れます。

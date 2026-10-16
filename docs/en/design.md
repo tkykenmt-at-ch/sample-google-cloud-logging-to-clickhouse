@@ -373,6 +373,8 @@ Compared with one `JSONExtract*` call per field, CPU time was about 1/2.7. (veri
 | GKE control plane | `control-plane/`component |
 | Anything else | resource type/log id (e.g. `k8s_node/kubelet`) |
 
+Some GCE logs have no instance-name label (`compute.googleapis.com/resource_name`; in the test environment `shielded_vm_integrity`, 4 of 1,663 GCE entries in 6 hours), so one VM appears under two `ServiceName` values, its name and its instance ID.
+
 **Body**
 
 The first of these that exists:

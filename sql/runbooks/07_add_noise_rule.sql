@@ -15,10 +15,9 @@
 -- Step 2: start counting the new rule from T (the existing rule keeps counting).
 ALTER TABLE gcl.gcl_noise_1m_v1_mv MODIFY QUERY
 WITH
-    JSONExtract(_raw_message, 'Tuple(timestamp String, logName String, resource Tuple(labels Map(String, String)),
+    JSONExtract(_raw_message, 'Tuple(timestamp String, logName String,
         protoPayload Tuple(serviceName String, methodName String, authenticationInfo Tuple(principalEmail String)))') AS e,
     tupleElement(e, 'protoPayload') AS p,
-    tupleElement(tupleElement(e, 'resource'), 'labels') AS res_labels,
     tupleElement(p, 'methodName') AS method,
     parseDateTime64BestEffortOrZero(tupleElement(e, 'timestamp'), 3, 'UTC') AS ts,
     multiIf(method = 'io.k8s.coordination.v1.leases.update', 'k8s-lease-update',
@@ -26,7 +25,7 @@ WITH
             '') AS rule
 SELECT
     toStartOfMinute(if(ts > toDateTime64('2000-01-01 00:00:00', 3, 'UTC'), ts, _publish_time)) AS Minute,
-    if(startsWith(tupleElement(e, 'logName'), 'projects/'), extract(tupleElement(e, 'logName'), '^projects/([^/]+)/'), res_labels['project_id']) AS ProjectId,
+    if(startsWith(tupleElement(e, 'logName'), 'projects/'), extract(tupleElement(e, 'logName'), '^projects/([^/]+)/'), extract(tupleElement(e, 'logName'), '^([^/]+/[^/]+)/')) AS ProjectId,
     rule AS Rule,
     tupleElement(p, 'serviceName') AS ServiceName,
     tupleElement(tupleElement(p, 'authenticationInfo'), 'principalEmail') AS Principal,

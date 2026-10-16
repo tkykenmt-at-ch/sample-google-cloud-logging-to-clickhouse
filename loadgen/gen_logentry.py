@@ -13,7 +13,7 @@ Modes:
 Edge cases are mixed in at configurable rates so that parsing materialized
 views can be tested against them: missing/late/future timestamps, unicode,
 large payloads, nested and non-string jsonPayload values, project numbers in
-resource.labels.project_id, duplicates, and
+resource.labels.project_id, organization and folder logs, duplicates, and
 (optionally) non-JSON poison messages.
 """
 import argparse
@@ -30,6 +30,7 @@ import uuid
 
 PROJECTS = ["example-prod", "example-stg"]
 PROJECT_NUMBERS = {"example-prod": "100000000001", "example-stg": "100000000002"}
+PARENTS = ["organizations/200000000001", "folders/300000000001"]  # aggregated sinks also carry these logs
 NAMESPACES = ["checkout", "catalog", "search", "kube-system"]
 CONTAINERS = ["api", "worker", "envoy", "fluentbit"]
 RUN_SERVICES = ["web-frontend", "order-api", "image-resizer"]
@@ -174,6 +175,9 @@ def make_entry(args, now):
     # maintenance events, Apps Script); logName still has the project ID.
     if random.random() < args.number_label_rate and "project_id" in e["resource"]["labels"]:
         e["resource"]["labels"]["project_id"] = PROJECT_NUMBERS[project]
+    if random.random() < args.parent_rate:
+        e["logName"] = e["logName"].replace(f"projects/{project}/", random.choice(PARENTS) + "/", 1)
+        e["resource"]["labels"].pop("project_id", None)
     sev = random.choice(SEVERITIES)
     if sev:
         e["severity"] = sev
@@ -240,6 +244,7 @@ def main():
     p.add_argument("--dup-rate", type=float, default=0.005, help="republish the same entry")
     p.add_argument("--lease-rate", type=float, default=0.0, help="share of Kubernetes Lease renewal entries (noise example)")
     p.add_argument("--number-label-rate", type=float, default=0.05, help="share of entries whose resource.labels.project_id is the project number")
+    p.add_argument("--parent-rate", type=float, default=0.01, help="share of organization and folder logs (logName organizations/... or folders/...)")
     p.add_argument("--poison-rate", type=float, default=0.0, help="non-JSON message bodies")
     p.add_argument("--seed", type=int)
     p.add_argument("--insert-id-prefix", default="", help="tag entries, e.g. to trigger a test failure")

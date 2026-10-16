@@ -93,7 +93,7 @@ The Japanese words in them come from the synthetic messages.
 When one table holds logs from several projects, filter the project by a prefix match on `LogName` and the location by the resource labels (`ResourceAttributes`).
 
 - **Project**: filter on whether `LogName` starts with `projects/<project id>/` (`startsWith(LogName, 'projects/<project id>/')`). `logName` starts with `projects/`, `organizations/`, `folders/` or `billingAccounts/`; even if a project number was used when writing, the exported entry carries the project ID ([LogEntry](https://cloud.google.com/logging/docs/reference/v2/rest/v2/LogEntry)). For aggregated sinks, the official procedure filters projects with `logName:"projects/PROJECT_ID/logs/"` ([aggregated sinks](https://cloud.google.com/logging/docs/export/aggregated_sinks)). Including the trailing `/` keeps projects whose names share a prefix apart (`app-dev2` for `app-dev`).
-- **`ProjectId` column**: the project ID in `logName`; the aggregate tables (L3 and noise counts) carry it too, and since they have no `LogName`, per-project aggregates use this column. Only logs whose `logName` does not start with `projects/` (organization and folder logs) fall back to `resource.labels.project_id`. The label does not come first because some logs carry the project number there, which would split one environment into its ID and its number: in the test environment, maintenance events (`maintenance.googleapis.com/maintenance_events`, `gke_nodepool` and `gce_instance`) and Apps Script logs, about 17,000 a day. The label values stay as Cloud Logging wrote them, in `ResourceAttributes`.
+- **`ProjectId` column**: set from `logName` alone; the aggregate tables (L3 and noise counts) carry it too. Logs under `projects/` get the project ID; other logs get `organizations/<organization id>`, `folders/<folder id>` or `billingAccounts/<billing account id>` (project IDs cannot contain `/`, so they stay distinct). For project logs, `ProjectId = '<project id>'` matches the same rows as the prefix match above, and the aggregate tables, which have no `LogName`, are split by this column. The resource label (`resource.labels.project_id`) is not used because some logs carry the project number there, which would split one environment into its ID and its number: in the test environment, maintenance events (`maintenance.googleapis.com/maintenance_events`, `gke_nodepool` and `gce_instance`) and Apps Script logs, about 17,000 a day. The label values stay as Cloud Logging wrote them, so where a number is needed, read `ResourceAttributes['project_id']` (only those logs carry it).
 - **Region and zone**: not normalized into columns; the Cloud Logging resource labels stay as they are in `ResourceAttributes`. Cloud Logging defines the key name and granularity of the location per resource type ([Monitored resource types](https://cloud.google.com/logging/docs/api/v2/resource-list)), so normalizing it in an MV would need a fix for every new resource type. Handle it with an expression at query time instead.
 
 In the test environment's real logs (mostly GKE and GCE, one day), the location labels were:
@@ -120,13 +120,13 @@ startsWith(LogName, 'projects/<project id>/')
 
 ```sql
 SELECT
-    extract(LogName, '^projects/([^/]+)/') AS Project,
+    ProjectId,
     replaceRegexpOne(coalesce(nullIf(ResourceAttributes['location'], ''), nullIf(ResourceAttributes['zone'], ''),
                               nullIf(ResourceAttributes['region'], ''), ''), '-[a-z]$', '') AS Region,
     count() AS rows
 FROM gcl.gcl_logs_v1
 WHERE Timestamp > now() - INTERVAL 1 HOUR
-GROUP BY Project, Region
+GROUP BY ProjectId, Region
 ORDER BY rows DESC;
 ```
 

@@ -29,7 +29,6 @@ DEFINER = {{MV_DEFINER}} SQL SECURITY DEFINER
 AS
 WITH
     JSONExtract(_raw_message, 'Tuple(timestamp String, logName String,
-        resource Tuple(labels Map(String, String)),
         protoPayload Tuple(`@type` String, serviceName String, methodName String, resourceName String,
                            authenticationInfo Tuple(principalEmail String),
                            requestMetadata Tuple(callerIp String),
@@ -40,9 +39,9 @@ SELECT
     if(ts > toDateTime64('2000-01-01 00:00:00', 9, 'UTC'), ts, toDateTime64(_publish_time, 9, 'UTC')) AS Timestamp,
     _publish_time AS PublishTime,
     _message_id AS MessageId,
-    if(tupleElement(tupleElement(e, 'resource'), 'labels')['project_id'] != '',
-       tupleElement(tupleElement(e, 'resource'), 'labels')['project_id'],
-       extract(tupleElement(e, 'logName'), '^projects/([^/]+)/')) AS ProjectId,
+    -- Same rule as MV1: from logName only
+    if(startsWith(tupleElement(e, 'logName'), 'projects/'), extract(tupleElement(e, 'logName'), '^projects/([^/]+)/'),
+       extract(tupleElement(e, 'logName'), '^([^/]+/[^/]+)/')) AS ProjectId,
     tupleElement(tupleElement(p, 'authenticationInfo'), 'principalEmail') AS Principal,
     tupleElement(p, 'serviceName') AS ServiceName,
     tupleElement(p, 'methodName') AS MethodName,

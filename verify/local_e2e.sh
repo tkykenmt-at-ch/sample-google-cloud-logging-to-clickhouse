@@ -4,7 +4,8 @@
 # (raw message + Pub/Sub virtual columns), and checks L1, the rollup (L3), the noise counts and
 # the optional L2 example (sql/examples/l2_audit_events_v1.sql) including its backfill from L0,
 # that the stuck-row check of verify/checks.sql ignores rows dropped by the noise rule, and that the
-# rollups keep projects apart (per-project totals match L1 and L0).
+# rollups keep projects apart (per-project totals match L1 and L0), with ProjectId taken from logName
+# even when resource.labels.project_id holds the project number.
 # Usage: verify/local_e2e.sh [entries]    Needs: clickhouse (local), python3.
 # WORKDIR=<dir> keeps the database there for exploring: clickhouse local --path <dir>/db
 set -euo pipefail
@@ -67,7 +68,11 @@ WITH
   (SELECT count() FROM (SELECT extract(JSONExtractString(_raw_message, 'logName'), '^projects/([^/]+)/') AS ProjectId, count() AS c
                         FROM gcl.gcl_landing_v1 WHERE position(_raw_message, 'io.k8s.coordination.v1.leases.update') > 0 GROUP BY ProjectId) AS a
    FULL JOIN (SELECT ProjectId, sum(Cnt) AS c FROM gcl.gcl_noise_1m_v1 GROUP BY ProjectId) AS b USING ProjectId
-   WHERE a.c != b.c OR ProjectId = '') AS noise_project_diff
+   WHERE a.c != b.c OR ProjectId = '') AS noise_project_diff,
+  -- ProjectId is the project ID even when resource.labels.project_id holds the number
+  (SELECT count() FROM gcl.gcl_logs_v1 WHERE match(ResourceAttributes['project_id'], '^[0-9]+$')) AS number_labels,
+  (SELECT count() FROM gcl.gcl_logs_v1 WHERE ProjectId != extract(LogName, '^projects/([^/]+)/')) AS l1_project_mismatch,
+  (SELECT count() FROM gcl.gcl_noise_1m_v1 WHERE match(ProjectId, '^[0-9]+$')) AS noise_project_number
 SELECT check, expected, actual, if(expected = actual, 'PASS', 'FAIL') AS result FROM (
   SELECT 1 AS n, 'L0 rows = generated'    AS check, toUInt64($N * 2) AS expected, l0 AS actual UNION ALL
   SELECT 2, 'L1 rows = L0 rows - noise',          l0 - lease_l0,       l1 UNION ALL
@@ -82,7 +87,10 @@ SELECT check, expected, actual, if(expected = actual, 'PASS', 'FAIL') AS result 
   SELECT 11, 'GCE ServiceName is the VM name',    toUInt64(0),                   gce_numeric UNION ALL
   SELECT 12, 'Several projects in the input',     toUInt64(projects > 1),        toUInt64(1) UNION ALL
   SELECT 13, 'L3 per project = L1 per project',   toUInt64(0),                   l3_project_diff UNION ALL
-  SELECT 14, 'Noise per project = L0 per project', toUInt64(0),                  noise_project_diff
+  SELECT 14, 'Noise per project = L0 per project', toUInt64(0),                  noise_project_diff UNION ALL
+  SELECT 15, 'Input has project-number labels',   toUInt64(1),                   toUInt64(number_labels > 0) UNION ALL
+  SELECT 16, 'L1 ProjectId = project in LogName', toUInt64(0),                   l1_project_mismatch UNION ALL
+  SELECT 17, 'Noise ProjectId is never a number', toUInt64(0),                   noise_project_number
 )
 ORDER BY n
 FORMAT PrettyCompactMonoBlock"

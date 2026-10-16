@@ -7,7 +7,6 @@ FROM
 (
     WITH
         JSONExtract(_raw_message, 'Tuple(timestamp String, logName String,
-            resource Tuple(labels Map(String, String)),
             protoPayload Tuple(`@type` String, serviceName String, methodName String, resourceName String,
                                authenticationInfo Tuple(principalEmail String),
                                requestMetadata Tuple(callerIp String),

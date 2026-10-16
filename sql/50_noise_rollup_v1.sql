@@ -25,10 +25,9 @@ CREATE MATERIALIZED VIEW IF NOT EXISTS gcl.gcl_noise_1m_v1_mv TO gcl.gcl_noise_1
 DEFINER = {{MV_DEFINER}} SQL SECURITY DEFINER
 AS
 WITH
-    JSONExtract(_raw_message, 'Tuple(timestamp String, logName String, resource Tuple(labels Map(String, String)),
+    JSONExtract(_raw_message, 'Tuple(timestamp String, logName String,
         protoPayload Tuple(serviceName String, methodName String, authenticationInfo Tuple(principalEmail String)))') AS e,
     tupleElement(e, 'protoPayload') AS p,
-    tupleElement(tupleElement(e, 'resource'), 'labels') AS res_labels,
     tupleElement(p, 'methodName') AS method,
     parseDateTime64BestEffortOrZero(tupleElement(e, 'timestamp'), 3, 'UTC') AS ts
 SELECT

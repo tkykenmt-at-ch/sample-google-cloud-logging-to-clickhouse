@@ -13,7 +13,8 @@ Modes:
 Edge cases are mixed in at configurable rates so that parsing materialized
 views can be tested against them: missing/late/future timestamps, unicode,
 large payloads, nested and non-string jsonPayload values, project numbers in
-resource.labels.project_id, organization and folder logs, duplicates, and
+resource.labels.project_id, organization and folder logs, empty messages,
+bodies with thousands of key="value" pairs, duplicates, and
 (optionally) non-JSON poison messages.
 """
 import argparse
@@ -192,6 +193,12 @@ def make_entry(args, now):
         e.pop("timestamp")
     e["receiveTimestamp"] = rfc3339(now)
     e["insertId"] = args.insert_id_prefix + rid(14)
+    if random.random() < args.empty_message_rate and "jsonPayload" in e:
+        e["jsonPayload"]["message"] = random.choice(["", None])
+    if random.random() < args.kv_flood_rate:  # e.g. an HTML error page logged as text: thousands of k="v"
+        for k in ("jsonPayload", "protoPayload"):
+            e.pop(k, None)
+        e["textPayload"] = " ".join(f'a{i}="v"' for i in range(1500))
     if random.random() < args.large_rate and "jsonPayload" in e:
         e["jsonPayload"]["blob"] = "x" * args.large_bytes
     return e
@@ -245,6 +252,8 @@ def main():
     p.add_argument("--lease-rate", type=float, default=0.0, help="share of Kubernetes Lease renewal entries (noise example)")
     p.add_argument("--number-label-rate", type=float, default=0.05, help="share of entries whose resource.labels.project_id is the project number")
     p.add_argument("--parent-rate", type=float, default=0.01, help="share of organization and folder logs (logName organizations/... or folders/...)")
+    p.add_argument("--empty-message-rate", type=float, default=0.002, help="jsonPayload.message empty or null")
+    p.add_argument("--kv-flood-rate", type=float, default=0.0005, help="textPayload with 1,500 key=\"value\" pairs")
     p.add_argument("--poison-rate", type=float, default=0.0, help="non-JSON message bodies")
     p.add_argument("--seed", type=int)
     p.add_argument("--insert-id-prefix", default="", help="tag entries, e.g. to trigger a test failure")

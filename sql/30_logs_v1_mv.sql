@@ -70,8 +70,8 @@ WITH
     -- Body: the first readable summary; never empty.
     multiIf(
         text_payload != '',                       text_payload,
-        mapContains(json_map, 'message'),         json_map['message'],
-        mapContains(json_map, 'msg'),             json_map['msg'],
+        json_map['message'] != '',                json_map['message'],
+        json_map['msg'] != '',                    json_map['msg'],
         is_audit,                                 concat(tupleElement(audit, 'serviceName'), ' ', tupleElement(audit, 'methodName')),
         tupleElement(http, 'requestMethod') != '',
             concat(tupleElement(http, 'requestMethod'), ' ', toString(tupleElement(http, 'status')), ' ', tupleElement(http, 'requestUrl')),
@@ -79,7 +79,10 @@ WITH
         proto_payload != '',                      concat('[', replaceRegexpOne(proto_type, '^.*/', ''), '] ', substring(proto_payload, 1, 2000)),
         concat('[', log_id, ']')) AS body,
     -- klog / logfmt style bodies (key="value" pairs) become kv.* attributes; latency also as milliseconds.
-    if(position(body, '="') > 0, extractKeyValuePairs(body, '=', ' ', '"'), map()) AS kv,
+    -- extractKeyValuePairs throws above 1000 pairs (extract_key_value_pairs_max_pairs_per_row), which would
+    -- block the batch: skip bodies with more '=' than that (an upper bound on the pairs, e.g. an HTML page).
+    -- The guard goes inside the argument: if() may still evaluate its branches on every row.
+    extractKeyValuePairs(if(position(body, '="') > 0 AND countSubstrings(body, '=') <= 1000, body, ''), '=', ' ', '"') AS kv,
     mapConcat(mapApply((k, v) -> (concat('kv.', k), v), kv),
               if(mapContains(kv, 'latency'),
                  map('kv.latency_ms', toString(round(multiIf(endsWith(kv['latency'], 'ms'), toFloat64OrZero(replaceOne(kv['latency'], 'ms', '')),

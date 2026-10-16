@@ -27,7 +27,9 @@ FROM
         tupleElement(tupleElement(p, 'requestMetadata'), 'callerIp') AS CallerIp,
         tupleElement(tupleElement(p, 'status'), 'code') AS StatusCode,
         tupleElement(e, 'logName') AS LogName
-    FROM (SELECT * FROM gcl.gcl_landing_v1 WHERE _publish_time < toDateTime64('{{T}}', 3, 'UTC') LIMIT 1 BY _message_id)
+    -- Rows copied by runbook 10 have no message ID: the LogEntry identity keeps them apart.
+    FROM (SELECT * FROM gcl.gcl_landing_v1 WHERE _publish_time < toDateTime64('{{T}}', 3, 'UTC')
+          LIMIT 1 BY if(_message_id != '', _message_id, concat(JSONExtractString(_raw_message, 'logName'), '|', JSONExtractString(_raw_message, 'insertId'), '|', JSONExtractString(_raw_message, 'timestamp'))))
     WHERE position(_raw_message, 'google.cloud.audit.AuditLog') > 0
       AND endsWith(tupleElement(p, '@type'), 'google.cloud.audit.AuditLog')
       AND tupleElement(p, 'methodName') != 'io.k8s.coordination.v1.leases.update'

@@ -20,18 +20,22 @@ export TZ=UTC
 
 ch() { clickhouse local --path "$W/db" --multiquery "$@"; }
 render() { sed -e "s/{{LANDING_TTL_DAYS}}/7/g; s/{{LOGS_TTL_DAYS}}/400/g; s/{{MV_DEFINER}}/default/g; s/{{T}}/$2/g" "$1"; }
-load() {  # load <file>: L0 rows as the pipe writes them, published "now"
+load() {  # load <file> [noid]: L0 rows as the pipe writes them, published "now"; noid = no message ID (runbook 10)
+  local id="toString(generateUUIDv4())"; [ "${2:-}" = noid ] && id="''"
   ch -q "INSERT INTO gcl.gcl_landing_v1 (_message_id, _publish_time, _attributes, _raw_message)
-         SELECT toString(generateUUIDv4()), now64(3), map(), line FROM file('$1', 'LineAsString')"
+         SELECT $id, now64(3), map(), line FROM file('$1', 'LineAsString')"
 }
 
 python3 loadgen/gen_logentry.py --out "$W/a.jsonl" --count "$N" --seed 1 --lease-rate 0.2 --late-rate 0.02 --future-rate 0.01 --missing-ts-rate 0.01 >/dev/null
 python3 loadgen/gen_logentry.py --out "$W/b.jsonl" --count "$N" --seed 2 >/dev/null
+NC=500  # copied from Cloud Storage by runbook 10: no message ID
+python3 loadgen/gen_logentry.py --out "$W/c.jsonl" --count "$NC" --seed 3 >/dev/null
 
 for f in sql/10_landing_v1.sql sql/20_logs_v1.sql sql/30_logs_v1_mv.sql sql/40_rollup_1m_v1.sql sql/50_noise_rollup_v1.sql; do
   render "$f" "" | ch
 done
 load "$W/a.jsonl"
+load "$W/c.jsonl" noid
 
 # Optional L2 added later, with a boundary T: batch b arrives after T, batch a is backfilled from L0.
 sleep 1
@@ -50,7 +54,11 @@ WITH
   (SELECT sum(Cnt) FROM gcl.gcl_logs_1m_v1) AS l3,
   (SELECT count() FROM gcl.gcl_logs_v1 WHERE mapContains(LogAttributes, 'audit.methodName')) AS audit_l1,
   (SELECT count() FROM gcl.audit_events_v1) AS audit_l2,
-  (SELECT uniqExact(MessageId) FROM gcl.audit_events_v1) AS audit_l2_ids,
+  (SELECT countIf(MessageId != '') FROM gcl.audit_events_v1) AS audit_l2_with_id,
+  (SELECT uniqExactIf(MessageId, MessageId != '') FROM gcl.audit_events_v1) AS audit_l2_ids,
+  (SELECT countIf(MessageId = '') FROM gcl.audit_events_v1) AS audit_l2_noid,
+  (SELECT countIf(MessageId = '' AND mapContains(LogAttributes, 'audit.methodName')) FROM gcl.gcl_logs_v1) AS audit_l1_noid,
+  (SELECT countIf(countSubstrings(Body, '=') > 1000) FROM gcl.gcl_logs_v1) AS kv_flood,
   (SELECT countIf(ServiceName = '' OR Body = '') FROM gcl.gcl_logs_v1) AS empty_svc_body,
   (SELECT countIf(toYear(Timestamp) < 2000) FROM gcl.gcl_logs_v1) AS ts_1970,
   (SELECT count() FROM gcl.gcl_logs_v1 WHERE hasAllTokens(lower(Body), lower('タイムアウト'))) AS ja_index,
@@ -77,12 +85,12 @@ WITH
   (SELECT countIf(ProjectId = '') FROM gcl.gcl_logs_v1) AS l1_project_empty,
   (SELECT count() FROM gcl.gcl_noise_1m_v1 WHERE match(ProjectId, '^[0-9]+$')) AS noise_project_number
 SELECT check, expected, actual, if(expected = actual, 'PASS', 'FAIL') AS result FROM (
-  SELECT 1 AS n, 'L0 rows = generated'    AS check, toUInt64($N * 2) AS expected, l0 AS actual UNION ALL
+  SELECT 1 AS n, 'L0 rows = generated'    AS check, toUInt64($N * 2 + $NC) AS expected, l0 AS actual UNION ALL
   SELECT 2, 'L1 rows = L0 rows - noise',          l0 - lease_l0,       l1 UNION ALL
   SELECT 3, 'Noise counts = noise rows in L0',    lease_l0,            lease_counted UNION ALL
   SELECT 4, 'L3 rollup total = L1 rows',          l1,                  l3 UNION ALL
   SELECT 5, 'L2 audit rows = L1 audit rows',      audit_l1,            audit_l2 UNION ALL
-  SELECT 6, 'L2 has no duplicates',               audit_l2,            audit_l2_ids UNION ALL
+  SELECT 6, 'L2 has no duplicates',               audit_l2_with_id,    audit_l2_ids UNION ALL
   SELECT 7, 'ServiceName/Body never empty',       toUInt64(0),                   empty_svc_body UNION ALL
   SELECT 8, 'No 1970 timestamps',                 toUInt64(0),                   ts_1970 UNION ALL
   SELECT 9, 'Japanese search (index) = LIKE',     ja_like,             ja_index UNION ALL
@@ -95,7 +103,9 @@ SELECT check, expected, actual, if(expected = actual, 'PASS', 'FAIL') AS result 
   SELECT 16, 'L1 ProjectId follows LogName'    , toUInt64(0),                   l1_project_mismatch UNION ALL
   SELECT 17, 'Noise ProjectId is never a number', toUInt64(0),                   noise_project_number UNION ALL
   SELECT 18, 'Org and folder logs keep parent',   toUInt64(2),                   l1_parents UNION ALL
-  SELECT 19, 'L1 ProjectId never empty',          toUInt64(0),                   l1_project_empty
+  SELECT 19, 'L1 ProjectId never empty',          toUInt64(0),                   l1_project_empty UNION ALL
+  SELECT 20, 'Backfill keeps rows without an ID', audit_l1_noid,                 audit_l2_noid UNION ALL
+  SELECT 21, 'Huge key=value bodies are kept',    toUInt64(1),                   toUInt64(kv_flood > 0)
 )
 ORDER BY n
 FORMAT PrettyCompactMonoBlock"

@@ -20,7 +20,9 @@ SELECT /* L2 columns in table order */ *
 FROM
 (
     -- same WITH ... SELECT as the MV, reading
-    -- FROM (SELECT * FROM gcl.gcl_landing_v1 WHERE _publish_time < toDateTime64('{{T}}', 3, 'UTC') LIMIT 1 BY _message_id)
+    -- FROM (SELECT * FROM gcl.gcl_landing_v1 WHERE _publish_time < toDateTime64('{{T}}', 3, 'UTC')
+    --       LIMIT 1 BY if(_message_id != '', _message_id, concat(JSONExtractString(_raw_message, 'logName'), '|', JSONExtractString(_raw_message, 'insertId'), '|', JSONExtractString(_raw_message, 'timestamp'))))
+    -- (rows copied by runbook 10 have no message ID: the LogEntry identity keeps them apart)
     -- WHERE ({{COND}})
 );
 SELECT count(), uniqExact(MessageId) FROM gcl.{{L2}};   -- equal: no duplicates

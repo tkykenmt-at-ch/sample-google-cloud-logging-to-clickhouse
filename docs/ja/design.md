@@ -387,7 +387,7 @@ MergeTree、公開日でパーティション、`ORDER BY _publish_time`、保�
 | 重大度 | `SeverityText`、`SeverityNumber` |
 | 発生元 | `ServiceName`、`ResourceType`、`ProjectId`、`LogName`、`LogId` |
 | 本文 | `Body`、`PayloadType`、`ProtoPayload` |
-| トレース | `TraceId`、`SpanId`、`TraceSampled` |
+| トレース | `TraceId`、`SpanId`、`TraceSampled`（`SpanId` はログが書いたまま。検証環境の Cloud Run のリクエストログでは、14 件中 1 件が 16 桁の 16 進数でなく 10 進数だった） |
 | HTTP | `HttpMethod`、`HttpStatus`、`HttpUrl`、`HttpLatencySeconds`、`HttpUserAgent`、`HttpRemoteIp` |
 | ソースと操作 | `SourceFile`、`SourceLine`、`SourceFunction`、`OperationId`、`OperationProducer` |
 | 識別子と解析の状態 | `InsertId`、`MessageId`、`ParseOk`、`ParserVersion` |
@@ -443,9 +443,10 @@ LogEntry の共通項目は `JSONExtract(_raw_message, 'Tuple(...)')` でまと�
 | 監査ログ（protoPayload が AuditLog） | API のサービス名（例 `compute.googleapis.com`） |
 | GKE のコンテナログ | 名前空間/コンテナ名 |
 | Cloud Run、Cloud Functions、App Engine | サービス名、関数名、モジュール名 |
+| Cloud Run のジョブ | `job/`ジョブ名 |
 | GCE インスタンス | インスタンス名（ラベルがなければインスタンス ID） |
 | GKE のコントロールプレーン | `control-plane/`コンポーネント名 |
-| 上記以外 | リソースの種類/ログ ID（例 `k8s_node/kubelet`） |
+| 上記以外（各行のラベルがない場合も含む） | リソースの種類/ログ ID（例 `k8s_node/kubelet`）。リソースの種類がなければログ ID |
 
 GCE のログには、インスタンス名のラベル（`compute.googleapis.com/resource_name`）を持たないものがあり（検証環境では `shielded_vm_integrity`、6 時間で 1,663 件中 4 件）、同じ VM が名前とインスタンス ID の 2 つの `ServiceName` に分かれます。
 

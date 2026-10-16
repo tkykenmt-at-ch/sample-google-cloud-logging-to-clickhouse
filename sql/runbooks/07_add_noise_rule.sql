@@ -4,11 +4,14 @@
 -- {{RULE}} = rule name, {{COND}} = condition on the raw L0 message, e.g.
 --   position(_raw_message, 'HTTP status=200') > 0 AND position(_raw_message, 'fluentbit') > 0
 -- Verified (clickhouse local 26.7, TZ=UTC): a matching row after T is counted, one before T is not.
+-- {{T}} = boundary (UTC), {{W_FROM}}/{{W_TO}} = closed comparison window after T (Step 4).
 
 -- Step 1: choose T = now + 5..10 min (UTC) and write the condition so that it matches only the noise
 --   (test it on L0 first: SELECT count() FROM gcl.gcl_landing_v1 WHERE ({{COND}}) AND _publish_time > now() - INTERVAL 1 HOUR).
 --   After T, add the same condition everywhere noise is excluded from a "must be 0" check:
 --   verify/checks.sql 2, runbooks 03 (Step 3), 04 (Step 4), 05, 06 (Step 4) and verify/local_e2e.sh check 10.
+--   Every L2 MV that reads L0 (runbook 08, sql/examples) and its backfill need the same exclusion,
+--   or the L2 keeps rows L1 drops.
 --   Rows matching both COND and the Lease rule are counted as k8s-lease-update (multiIf order), so leave
 --   Lease updates out of COND, or the Step 4 comparison below will not match.
 

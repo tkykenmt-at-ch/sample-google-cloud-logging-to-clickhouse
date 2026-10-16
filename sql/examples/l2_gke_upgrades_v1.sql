@@ -2,6 +2,8 @@
 -- Promote one log type into a typed table for clean dashboards: GKE upgrade notifications
 -- (log id container.googleapis.com/notifications). The generic L1 keeps them too; this table
 -- only adds typed columns. Register it as its own ClickStack log source.
+-- Created together with sql/10..50, it needs no boundary. Added to a running pipeline, follow runbook 08:
+-- add AND _publish_time >= T to the MV and backfill the rows before T from L0.
 CREATE TABLE IF NOT EXISTS gcl.gke_upgrade_events_v1
 (
     Timestamp      DateTime64(9) CODEC(Delta(8), ZSTD(1)),
@@ -69,6 +71,8 @@ SELECT
     et AS EndTime,
     if(et > st AND toYear(st) > 2000, dateDiff('millisecond', st, et) / 1000, 0) AS DurationSec,
     tupleElement(p, 'operation') AS Operation,
-    map('location', rl['location'], 'project_id', rl['project_id']) AS LogAttributes
+    -- project from logName, as ProjectId in MV1 (the resource label can hold the project number)
+    map('location', rl['location'], 'project_id', if(startsWith(tupleElement(e, 'logName'), 'projects/'),
+        extract(tupleElement(e, 'logName'), '^projects/([^/]+)/'), extract(tupleElement(e, 'logName'), '^([^/]+/[^/]+)/'))) AS LogAttributes
 FROM gcl.gcl_landing_v1
 WHERE position(_raw_message, 'container.googleapis.com%2Fnotifications') > 0;

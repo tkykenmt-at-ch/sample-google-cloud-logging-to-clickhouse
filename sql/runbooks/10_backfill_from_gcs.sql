@@ -10,6 +10,8 @@
 --   {{FROM}} / {{TO}}  one chunk of receiveTimestamp, UTC. Chunks must not overlap.
 --   {{T0}}         first _publish_time the live pipe delivered (Step 1)
 -- Copied rows get _message_id = '' and _publish_time = receiveTimestamp (as runbook 06).
+-- The LogEntry identity compares the parsed timestamp, so a different number of fraction digits in the
+-- copied files and the Pub/Sub export cannot make the same entry look new.
 -- Rows older than the L0 TTL are written to L0 and the MVs run on the INSERT, but the background TTL
 -- drop removes those parts right after (Cloud 26.6: TTLDropMerge 0.1 s after the insert; clickhouse local
 -- 26.7: within 3 s). The MV target got every row.
@@ -48,7 +50,8 @@ FROM
 (
     SELECT line,
            parseDateTime64BestEffortOrZero(JSONExtractString(line, 'receiveTimestamp'), 3, 'UTC') AS rt,
-           (JSONExtractString(line, 'logName'), JSONExtractString(line, 'insertId'), JSONExtractString(line, 'timestamp')) AS id
+           (JSONExtractString(line, 'logName'), JSONExtractString(line, 'insertId'),
+            parseDateTime64BestEffortOrZero(JSONExtractString(line, 'timestamp'), 9, 'UTC')) AS id
     FROM gcs('{{GCS_URL}}', '{{HMAC_KEY}}', '{{HMAC_SECRET}}', 'LineAsString', 'line String')
     WHERE rt >= toDateTime64('{{FROM}}', 3, 'UTC') AND rt < toDateTime64('{{TO}}', 3, 'UTC')
     LIMIT 1 BY id
@@ -63,7 +66,8 @@ FROM
 (
     SELECT line,
            parseDateTime64BestEffortOrZero(JSONExtractString(line, 'receiveTimestamp'), 3, 'UTC') AS rt,
-           (JSONExtractString(line, 'logName'), JSONExtractString(line, 'insertId'), JSONExtractString(line, 'timestamp')) AS id
+           (JSONExtractString(line, 'logName'), JSONExtractString(line, 'insertId'),
+            parseDateTime64BestEffortOrZero(JSONExtractString(line, 'timestamp'), 9, 'UTC')) AS id
     FROM gcs('{{GCS_URL}}', '{{HMAC_KEY}}', '{{HMAC_SECRET}}', 'LineAsString', 'line String')
     WHERE rt >= toDateTime64('{{T0}}', 3, 'UTC') - INTERVAL 10 MINUTE
       AND rt <  toDateTime64('{{T0}}', 3, 'UTC') + INTERVAL 10 MINUTE
@@ -71,7 +75,8 @@ FROM
 )
 WHERE id NOT IN
 (
-    SELECT (JSONExtractString(_raw_message, 'logName'), JSONExtractString(_raw_message, 'insertId'), JSONExtractString(_raw_message, 'timestamp'))
+    SELECT (JSONExtractString(_raw_message, 'logName'), JSONExtractString(_raw_message, 'insertId'),
+            parseDateTime64BestEffortOrZero(JSONExtractString(_raw_message, 'timestamp'), 9, 'UTC'))
     FROM gcl.gcl_landing_v1
     WHERE _publish_time >= toDateTime64('{{T0}}', 3, 'UTC') - INTERVAL 30 MINUTE
 );

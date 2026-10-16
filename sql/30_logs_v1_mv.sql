@@ -56,7 +56,7 @@ WITH
     if(is_audit, audit_all, map()) AS audit_map,
     tupleElement(e, 'httpRequest') AS http,
     -- httpRequest and operation fields without a column (responseSize, referer, protocol, cacheHit, first, last, ...).
-    if(tupleElement(http, 'requestMethod') = '' AND tupleElement(http, 'status') = 0, map(),
+    if(position(_raw_message, '"httpRequest"') = 0, map(),
        mapApply((k, v) -> (concat('http.', k), v),
                 mapFilter((k, v) -> NOT has(['requestMethod', 'requestUrl', 'status', 'userAgent', 'remoteIp', 'latency'], k) AND v != '',
                           JSONExtract(JSONExtractRaw(_raw_message, 'httpRequest'), 'Map(String, String)')))) AS http_map,
@@ -84,10 +84,11 @@ WITH
     -- The guard goes inside the argument: if() may still evaluate its branches on every row.
     extractKeyValuePairs(if(position(body, '="') > 0 AND countSubstrings(body, '=') <= 1000, body, ''), '=', ' ', '"') AS kv,
     mapConcat(mapApply((k, v) -> (concat('kv.', k), v), kv),
-              if(mapContains(kv, 'latency'),
-                 map('kv.latency_ms', toString(round(multiIf(endsWith(kv['latency'], 'ms'), toFloat64OrZero(replaceOne(kv['latency'], 'ms', '')),
-                                                             endsWith(kv['latency'], 'µs'), toFloat64OrZero(replaceOne(kv['latency'], 'µs', '')) / 1000,
-                                                             endsWith(kv['latency'], 's'), toFloat64OrZero(replaceOne(kv['latency'], 's', '')) * 1000, 0), 3))),
+              -- A number with one unit (Go durations); anything else (e.g. 1m2s) gets no kv.latency_ms.
+              if(match(kv['latency'], '^[0-9.]+(ns|us|µs|ms|s)$'),
+                 map('kv.latency_ms', toString(round(toFloat64OrZero(extract(kv['latency'], '^([0-9.]+)'))
+                     * multiIf(endsWith(kv['latency'], 'ns'), 0.000001, endsWith(kv['latency'], 'us') OR endsWith(kv['latency'], 'µs'), 0.001,
+                               endsWith(kv['latency'], 'ms'), 1, 1000), 6))),
                  map())) AS kv_map
 SELECT
     if(ts_parsed > toDateTime64('2000-01-01 00:00:00', 9, 'UTC'), ts_parsed, toDateTime64(_publish_time, 9, 'UTC')) AS Timestamp,
@@ -102,14 +103,19 @@ SELECT
         is_audit AND tupleElement(audit, 'serviceName') != '', tupleElement(audit, 'serviceName'),
         res_type = 'k8s_container' AND res_labels['container_name'] != '',
                                          concat(res_labels['namespace_name'], '/', res_labels['container_name']),
-        res_type = 'cloud_run_revision', res_labels['service_name'],
-        res_type = 'cloud_function',     res_labels['function_name'],
-        res_type = 'gae_app',            res_labels['module_id'],
-        res_type = 'gce_instance',       if(entry_labels['compute.googleapis.com/resource_name'] != '',
-                                            entry_labels['compute.googleapis.com/resource_name'], res_labels['instance_id']),
-        res_type = 'k8s_control_plane_component', concat('control-plane/', res_labels['component_name']),
+        -- Each branch applies only when its label is present; otherwise the generic fallback below.
+        res_type = 'cloud_run_revision' AND res_labels['service_name'] != '', res_labels['service_name'],
+        res_type = 'cloud_run_job' AND res_labels['job_name'] != '',          concat('job/', res_labels['job_name']),
+        res_type = 'cloud_function' AND res_labels['function_name'] != '',    res_labels['function_name'],
+        res_type = 'gae_app' AND res_labels['module_id'] != '',               res_labels['module_id'],
+        res_type = 'gce_instance' AND entry_labels['compute.googleapis.com/resource_name'] != '',
+                                         entry_labels['compute.googleapis.com/resource_name'],
+        res_type = 'gce_instance' AND res_labels['instance_id'] != '',        res_labels['instance_id'],
+        res_type = 'k8s_control_plane_component' AND res_labels['component_name'] != '',
+                                         concat('control-plane/', res_labels['component_name']),
         -- Anything else: "<resource type>/<log id>" (e.g. k8s_node/kubelet, k8s_pod/events) so mixed logs stay separable.
-        log_id != '',                    concat(res_type, '/', log_id),
+        res_type != '' AND log_id != '', concat(res_type, '/', log_id),
+        log_id != '',                    log_id,
         res_type != '',                  res_type,
         'unknown') AS ServiceName,
     res_type AS ResourceType,

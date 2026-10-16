@@ -470,7 +470,7 @@ LogEntry の共通項目は `JSONExtract(_raw_message, 'Tuple(...)')` でまと�
 | LogAttributes の `labels.*` | LogEntry の labels |
 | LogAttributes の接頭辞なしのキー | jsonPayload の最上位のキー。入れ子の値は JSON 文字列のまま |
 | LogAttributes の `audit.*` | 監査ログの methodName、resourceName、principalEmail、callerIp、userAgent、statusCode（protoPayload が AuditLog のときだけ） |
-| LogAttributes の `kv.*` | 本文の `key="value"`（klog、logfmt）を分解したもの。`kv.latency_ms` は latency をミリ秒に直した値 |
+| LogAttributes の `kv.*` | 本文の `key="value"`（klog、logfmt）を分解したもの。`kv.latency_ms` は latency をミリ秒に直した値。本文の `=` が 1,000 個を超えるログ（HTML のページなど）は分解しない（`extractKeyValuePairs` は 1,000 組を超えると例外を出し、MV のバッチが止まるため） |
 | LogAttributes の `entry.*` | 列にしていない LogEntry の項目（split、errorGroups、apphub、otel、metadata など。将来足される項目も含む）。項目名を列挙せずに残りを入れる |
 | LogAttributes の `http.*`、`operation.*` | 列にしていない httpRequest（responseSize、referer、protocol、cacheHit など）と operation（first、last）の項目 |
 | LogAttributes の `proto.type` | protoPayload の型（`@type`） |

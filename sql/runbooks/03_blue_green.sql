@@ -11,16 +11,22 @@ CREATE TABLE IF NOT EXISTS gcl.gcl_logs_1m_v2 AS gcl.gcl_logs_1m_v1;
 CREATE MATERIALIZED VIEW IF NOT EXISTS gcl.gcl_logs_1m_v2_mv TO gcl.gcl_logs_1m_v2
 DEFINER = {{MV_DEFINER}} SQL SECURITY DEFINER
 AS
-SELECT toStartOfMinute(Timestamp) AS Minute, ServiceName, SeverityText, HttpStatus, count() AS Cnt
+SELECT
+    toStartOfMinute(Timestamp) AS Minute,
+    ProjectId,
+    ServiceName,
+    SeverityText,
+    HttpStatus,
+    count() AS Cnt
 FROM gcl.gcl_logs_v2
-GROUP BY Minute, ServiceName, SeverityText, HttpStatus;
+GROUP BY Minute, ProjectId, ServiceName, SeverityText, HttpStatus;
 -- Other MVs that read gcl_logs_v1 (L3 from runbook 09) need a v2 copy here as well.
 
 CREATE MATERIALIZED VIEW gcl.gcl_logs_v2_mv TO gcl.gcl_logs_v2
 DEFINER = {{MV_DEFINER}} SQL SECURITY DEFINER
 AS
 -- body of the v2 parser (WITH ... SELECT ... FROM gcl.gcl_landing_v1)
-WHERE _publish_time >= toDateTime64('{{T}}', 3, 'UTC');
+WHERE (/* the current WHERE of MV1: noise rules */) AND _publish_time >= toDateTime64('{{T}}', 3, 'UTC');
 
 -- Step 3: after T, confirm v2 starts at T and nothing is stuck in v1.
 SELECT min(PublishTime), max(PublishTime), count() FROM gcl.gcl_logs_v2;
@@ -41,15 +47,18 @@ FROM
 (
     -- v2 parser body ... reading L0 through a deduplicating subquery:
     -- FROM (SELECT * FROM gcl.gcl_landing_v1
-    --       WHERE _publish_time < toDateTime64('{{T}}', 3, 'UTC') LIMIT 1 BY _message_id)
+    --       WHERE _publish_time < toDateTime64('{{T}}', 3, 'UTC')
+    --       LIMIT 1 BY if(_message_id != '', _message_id, concat(JSONExtractString(_raw_message, 'logName'), '|', JSONExtractString(_raw_message, 'insertId'), '|', JSONExtractString(_raw_message, 'timestamp'))))
+    -- WHERE (/* the WHERE of the v2 MV without its T bound: noise rules */)
+    -- (rows copied by runbook 10 have no message ID: the LogEntry identity keeps them apart)
     -- When the source is gcl_logs_v1 instead, deduplicate on MessageId, but keep rows without one
     -- (rows migrated by runbook 06 have MessageId = ''): use the LogEntry identity for those.
     --   LIMIT 1 BY if(MessageId != '', MessageId, concat(LogName, '|', InsertId, '|', toString(Timestamp)))
 );
 -- MOVE PARTITION does not fire the v2 rollup MV: aggregate the work table first.
-INSERT INTO gcl.gcl_logs_1m_v2
-SELECT toStartOfMinute(Timestamp) AS Minute, ServiceName, SeverityText, HttpStatus, count() AS Cnt
-FROM gcl.gcl_logs_v2_bf GROUP BY Minute, ServiceName, SeverityText, HttpStatus;
+INSERT INTO gcl.gcl_logs_1m_v2 (Minute, ProjectId, ServiceName, SeverityText, HttpStatus, Cnt)
+SELECT toStartOfMinute(Timestamp) AS Minute, ProjectId, ServiceName, SeverityText, HttpStatus, count() AS Cnt
+FROM gcl.gcl_logs_v2_bf GROUP BY Minute, ProjectId, ServiceName, SeverityText, HttpStatus;
 SELECT partition_id, sum(rows) FROM system.parts
 WHERE database = 'gcl' AND table = 'gcl_logs_v2_bf' AND active GROUP BY partition_id ORDER BY partition_id;
 ALTER TABLE gcl.gcl_logs_v2_bf MOVE PARTITION ID '{{PART}}' TO TABLE gcl.gcl_logs_v2;   -- repeat per partition

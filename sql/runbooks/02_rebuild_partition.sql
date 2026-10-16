@@ -16,9 +16,11 @@ FROM
     -- body of the fixed MV (WITH ... SELECT ...), reading L0 through a deduplicating subquery:
     -- FROM (SELECT * FROM gcl.gcl_landing_v1
     --       WHERE _publish_time >= toDateTime64('{{FROM}}', 3, 'UTC') AND _publish_time < toDateTime64('{{TO}}', 3, 'UTC')
-    --       LIMIT 1 BY _message_id)
+    --       LIMIT 1 BY if(_message_id != '', _message_id, concat(JSONExtractString(_raw_message, 'logName'), '|', JSONExtractString(_raw_message, 'insertId'), '|', JSONExtractString(_raw_message, 'timestamp'))))
+    -- WHERE (/* the current WHERE of the MV: noise rules */)
     -- L0 keeps Pub/Sub redeliveries as separate rows; without LIMIT 1 BY they come back into L1
-    -- (observed: 493 duplicates in an 8-minute window right after a pipe seek).
+    -- (observed: 493 duplicates in an 8-minute window right after a pipe seek). Rows copied by runbook 10
+    -- have no message ID: the LogEntry identity keeps them apart.
 )
 WHERE toDate(Timestamp) = '{{DAY}}';
 

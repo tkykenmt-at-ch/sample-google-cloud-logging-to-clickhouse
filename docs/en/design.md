@@ -395,7 +395,7 @@ Body and ServiceName were never empty for the log kinds tested (audit logs, GKE,
 | LogAttributes `labels.*` | LogEntry labels |
 | LogAttributes keys without a prefix | Top-level jsonPayload keys. Nested values stay JSON strings |
 | LogAttributes `audit.*` | Audit methodName, resourceName, principalEmail, callerIp, userAgent, statusCode (only for AuditLog protoPayloads) |
-| LogAttributes `kv.*` | `key="value"` pairs in the body (klog, logfmt). `kv.latency_ms` is latency converted to milliseconds |
+| LogAttributes `kv.*` | `key="value"` pairs in the body (klog, logfmt). `kv.latency_ms` is latency converted to milliseconds. Bodies with more than 1,000 `=` (an HTML page, say) are not split: `extractKeyValuePairs` throws above 1,000 pairs, which would block the MV batch |
 | LogAttributes `entry.*` | LogEntry fields without a column (split, errorGroups, apphub, otel, metadata, and fields added later), taken as "everything else" without listing names |
 | LogAttributes `http.*`, `operation.*` | httpRequest fields without a column (responseSize, referer, protocol, cacheHit, ...) and operation fields (first, last) |
 | LogAttributes `proto.type` | protoPayload type (`@type`) |

@@ -1,7 +1,8 @@
 -- Runbook 09: add an L3 (aggregate table) on top of L1 or an L2, e.g. long-range trend charts, or keeping
 -- only aggregates for longer than the rows. MVs fire on INSERT only, so the past is filled by an
 -- INSERT ... SELECT with the same GROUP BY. Partition operations on the source (REPLACE/MOVE PARTITION in
--- the appendix runbooks) do not fire the L3 MV: rebuild the matching L3 partitions after them.
+-- the appendix runbooks) do not fire the L3 MV: rebuild the matching L3 partitions after them (whole months here).
+-- {{L3}} = table name, {{L3_TTL_DAYS}} = its retention, {{T}} = boundary (UTC); {{CHECK_TO}} in the backfill file.
 
 -- Step 1: aggregate table and its MV from L1 (or an L2), limited to PublishTime >= T.
 CREATE TABLE IF NOT EXISTS gcl.{{L3}}
@@ -14,7 +15,8 @@ CREATE TABLE IF NOT EXISTS gcl.{{L3}}
 ENGINE = AggregatingMergeTree
 PARTITION BY toYYYYMM(Minute)
 ORDER BY (LogId, SeverityText, Minute)
-TTL Minute + INTERVAL {{L3_TTL_DAYS}} DAY;
+TTL Minute + INTERVAL {{L3_TTL_DAYS}} DAY
+SETTINGS ttl_only_drop_parts = 1;
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS gcl.{{L3}}_mv TO gcl.{{L3}}
 DEFINER = {{MV_DEFINER}} SQL SECURITY DEFINER

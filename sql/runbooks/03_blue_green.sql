@@ -3,6 +3,8 @@
 -- Create the new MV before T (T = now + 5..10 min): every message with _publish_time >= T is then
 -- inserted after the new MV exists, and messages before T are written by the old MV.
 -- Verified under load: 0 missing and 0 duplicate message IDs in v2, rollup equal to v1.
+-- Variables: {{T}} = boundary (UTC), {{MV_DEFINER}} = MV user, {{L0_MIN}} = oldest publish time in L0 (Step 4),
+--   {{PART}} = each partition ID of the work table (Step 4).
 
 -- Step 1: new table with a permanent versioned name (never RENAME it later).
 --   Copy sql/20_logs_v1.sql, rename to gcl_logs_v2, apply the change (e.g. a new ORDER BY).
@@ -33,12 +35,18 @@ SELECT min(PublishTime), max(PublishTime), count() FROM gcl.gcl_logs_v2;
 SELECT max(PublishTime) FROM gcl.gcl_logs_v1;
 SELECT count() FROM gcl.gcl_landing_v1
 WHERE _publish_time < toDateTime64('{{T}}', 3, 'UTC')
-  AND _message_id NOT IN (SELECT MessageId FROM gcl.gcl_logs_v1)
+  AND _publish_time >= toDateTime64('{{T}}', 3, 'UTC') - INTERVAL 1 DAY
+  AND _message_id NOT IN (SELECT MessageId FROM gcl.gcl_logs_v1 WHERE PublishTime >= toDateTime64('{{T}}', 3, 'UTC') - INTERVAL 1 DAY)
   -- Rows dropped on purpose by a noise rule (sql/30 WHERE, sql/50, runbook 07) are not stuck: keep in sync.
   AND JSONExtractString(_raw_message, 'protoPayload', 'methodName') != 'io.k8s.coordination.v1.leases.update';   -- must be 0 (runbook 05)
 
 -- Step 4: backfill rows before T into a work table, add them to the v2 rollup, then MOVE PARTITION.
---   Source: L0 when the change needs re-parsing and L0 still holds the range; otherwise gcl_logs_v1.
+--   Source: L0 when the change needs re-parsing, but L0 holds only its TTL (7 days by default). The rest of the
+--   history comes from gcl_logs_v1, before the oldest publish time still in L0, as in runbook 08. Read that time
+--   ONCE and use the same {{L0_MIN}} in both INSERTs (L0 keeps expiring while you work):
+--     SELECT min(_publish_time) FROM gcl.gcl_landing_v1;   -- -> {{L0_MIN}}
+--   L0 part: _publish_time >= L0_MIN AND < T. gcl_logs_v1 part: PublishTime < L0_MIN.
+--   Without re-parsing, gcl_logs_v1 alone is the source.
 --   Late-arriving logs land in older Timestamp partitions: move every partition the work table has.
 CREATE TABLE gcl.gcl_logs_v2_bf AS gcl.gcl_logs_v2;
 INSERT INTO gcl.gcl_logs_v2_bf

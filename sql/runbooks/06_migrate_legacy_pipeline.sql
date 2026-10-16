@@ -5,6 +5,7 @@
 -- timestamp throughout.
 -- {{LEGACY_TABLE}} = the old landing table (e.g. default.logs_landing), {{LEGACY_TS}} = its column holding the
 -- LogEntry timestamp (used for chunking; any column that bounds the rows works).
+-- {{X}} = T_new - 10 min (UTC), {{CHUNK_FROM}}/{{CHUNK_TO}} = one chunk of {{LEGACY_TS}} (Step 2).
 -- Without _publish_time there is no exact boundary, so the cutover uses the LogEntry identity
 -- (logName, insertId, timestamp) and receiveTimestamp as a stand-in for the publish time.
 -- Verified on a real Cloud Logging pipeline (about 18 msg/s, 7 days in the old landing table):
@@ -45,8 +46,12 @@ FROM
 
 -- Step 3: fill [X, T_new + 10 min) from the old table, skipping entries the new pipe already wrote.
 --   Noise counts for [X, T_new) come from neither Step 2 nor the new pipe: count them from the old table
---   for that range as in Step 2 (rows the new pipe already delivered are in the new L0 and were counted there;
---   skip them with the same identity check).
+--   for that range as in Step 2. Noise rows never reach L1, so the identity check for them reads the new L0
+--   (rows the new pipe already delivered were counted there):
+--     ... WHERE (logName, JSONExtractString(_raw_message, 'insertId'), JSONExtractString(_raw_message, 'timestamp')) NOT IN
+--       (SELECT JSONExtractString(_raw_message, 'logName'), JSONExtractString(_raw_message, 'insertId'),
+--               JSONExtractString(_raw_message, 'timestamp')
+--        FROM gcl.gcl_landing_v1 WHERE _publish_time >= toDateTime64('{{X}}', 3, 'UTC') - INTERVAL 30 MINUTE)
 INSERT INTO gcl.gcl_logs_v1
 SELECT /* L1 columns in table order */ *
 FROM

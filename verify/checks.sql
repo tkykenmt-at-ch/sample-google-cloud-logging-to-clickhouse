@@ -1,5 +1,8 @@
 -- Periodic checks for the GCL -> Pub/Sub ClickPipes -> ClickHouse pipeline.
 -- Run with tools/chq.py. Table names follow sql/ (v1); adjust after a Blue/Green switch.
+-- L1 is partitioned and sorted by Timestamp, not PublishTime: checks that select by publish time also bound
+-- Timestamp, so they read a few partitions instead of the whole retention. Entries published more than
+-- 7 days after their timestamp fall outside those bounds.
 
 -- 1. Ingest latency: Pub/Sub publish -> row inserted, and LogEntry timestamp -> inserted.
 SELECT
@@ -9,7 +12,7 @@ SELECT
     round(quantile(0.99)(dateDiff('millisecond', PublishTime, InsertedAt)) / 1000, 1) AS p99_publish_to_ch_s,
     round(quantile(0.99)(dateDiff('millisecond', Timestamp, InsertedAt)) / 1000, 1) AS p99_event_to_ch_s
 FROM gcl.gcl_logs_v1
-WHERE PublishTime > now() - INTERVAL 15 MINUTE
+WHERE PublishTime > now() - INTERVAL 15 MINUTE AND Timestamp > now() - INTERVAL 7 DAY
 GROUP BY minute
 ORDER BY minute;
 
@@ -21,28 +24,30 @@ WHERE _publish_time BETWEEN now() - INTERVAL 1 DAY AND now() - INTERVAL 2 MINUTE
   AND JSONExtractString(_raw_message, 'protoPayload', 'methodName') != 'io.k8s.coordination.v1.leases.update'
   AND _message_id NOT IN (
       SELECT MessageId FROM gcl.gcl_logs_v1
-      WHERE PublishTime BETWEEN now() - INTERVAL 1 DAY AND now());
+      WHERE PublishTime BETWEEN now() - INTERVAL 1 DAY AND now() AND Timestamp > now() - INTERVAL 8 DAY);
 
--- 3. Duplicates: Pub/Sub redelivery (same MessageId) vs. the same LogEntry exported twice (insertId + timestamp).
+-- 3. Duplicates: Pub/Sub redelivery (same MessageId) vs. the same LogEntry exported twice (the LogEntry
+--    identity logName + insertId + timestamp, as in runbooks 06 and 10). Backfilled rows have no MessageId.
 SELECT
     count() AS rows,
-    rows - uniqExact(MessageId) AS dup_by_message_id,
-    rows - uniqExact(ProjectId, InsertId, Timestamp) AS dup_by_insert_id
+    countIf(MessageId != '') - uniqExactIf(MessageId, MessageId != '') AS dup_by_message_id,
+    rows - uniqExact(LogName, InsertId, Timestamp) AS dup_by_insert_id
 FROM gcl.gcl_logs_v1
-WHERE PublishTime > now() - INTERVAL 1 DAY;
+WHERE PublishTime > now() - INTERVAL 1 DAY AND Timestamp > now() - INTERVAL 8 DAY;
 
 -- 4. Late arrivals (LogEntry.timestamp behind publish time): sizes rebuild windows and partition churn.
 SELECT
-    multiIf(d < 60, '1: <1m', d < 600, '2: 1-10m', d < 3600, '3: 10-60m', d < 86400, '4: 1-24h', '5: >24h') AS bucket,
+    multiIf(d < 0, '0: future', d < 60, '1: <1m', d < 600, '2: 1-10m', d < 3600, '3: 10-60m', d < 86400, '4: 1-24h', '5: >24h') AS bucket,
     count() AS rows
-FROM (SELECT dateDiff('second', Timestamp, PublishTime) AS d FROM gcl.gcl_logs_v1 WHERE PublishTime > now() - INTERVAL 1 DAY)
+FROM (SELECT dateDiff('second', Timestamp, PublishTime) AS d FROM gcl.gcl_logs_v1
+      WHERE PublishTime > now() - INTERVAL 1 DAY AND Timestamp > now() - INTERVAL 8 DAY)
 GROUP BY bucket
 ORDER BY bucket;
 
 -- 5. Parser health: rows whose body was not valid JSON, and the active parser versions.
 SELECT ParserVersion, countIf(NOT ParseOk) AS invalid_json, count() AS rows
 FROM gcl.gcl_logs_v1
-WHERE PublishTime > now() - INTERVAL 1 DAY
+WHERE PublishTime > now() - INTERVAL 1 DAY AND Timestamp > now() - INTERVAL 8 DAY
 GROUP BY ParserVersion;
 
 -- 6. Failed pipe inserts (the pipe state can stay Running while a batch is being retried).

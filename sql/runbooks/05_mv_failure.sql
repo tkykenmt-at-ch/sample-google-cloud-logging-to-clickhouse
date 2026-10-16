@@ -18,7 +18,7 @@ WHERE _publish_time BETWEEN now() - INTERVAL 1 DAY AND now() - INTERVAL 2 MINUTE
   AND JSONExtractString(_raw_message, 'protoPayload', 'methodName') != 'io.k8s.coordination.v1.leases.update'
   AND _message_id NOT IN (
       SELECT MessageId FROM gcl.gcl_logs_v1
-      WHERE PublishTime BETWEEN now() - INTERVAL 1 DAY AND now());
+      WHERE PublishTime BETWEEN now() - INTERVAL 1 DAY AND now() AND Timestamp > now() - INTERVAL 8 DAY);  -- Timestamp: partition pruning
 
 -- Failed pipe inserts and their exceptions (query_log is per replica: read every replica).
 SELECT event_time, hostName() AS replica, exception_code, substring(exception, 1, 300) AS exception, written_rows

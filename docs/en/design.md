@@ -320,7 +320,7 @@ MergeTree, partitioned by publish date, `ORDER BY _publish_time`, 7-day TTL (`la
 | Severity | `SeverityText`, `SeverityNumber` |
 | Source | `ServiceName`, `ResourceType`, `ProjectId`, `LogName`, `LogId` |
 | Body | `Body`, `PayloadType`, `ProtoPayload` |
-| Trace | `TraceId`, `SpanId`, `TraceSampled` |
+| Trace | `TraceId`, `SpanId`, `TraceSampled` (`SpanId` as the log wrote it; in the test environment, 1 of 14 Cloud Run request logs had a decimal value instead of 16 hex digits) |
 | HTTP | `HttpMethod`, `HttpStatus`, `HttpUrl`, `HttpLatencySeconds`, `HttpUserAgent`, `HttpRemoteIp` |
 | Code and operation | `SourceFile`, `SourceLine`, `SourceFunction`, `OperationId`, `OperationProducer` |
 | IDs and parser state | `InsertId`, `MessageId`, `ParseOk`, `ParserVersion` |
@@ -369,9 +369,10 @@ Compared with one `JSONExtract*` call per field, CPU time was about 1/2.7. (veri
 | Audit logs (protoPayload is an AuditLog) | API service name (e.g. `compute.googleapis.com`) |
 | GKE container logs | namespace/container |
 | Cloud Run, Cloud Functions, App Engine | service, function, or module name |
+| Cloud Run jobs | `job/`job name |
 | GCE instance | instance name (instance ID without the label) |
 | GKE control plane | `control-plane/`component |
-| Anything else | resource type/log id (e.g. `k8s_node/kubelet`) |
+| Anything else (including rows above whose label is missing) | resource type/log id (e.g. `k8s_node/kubelet`); the log id alone without a resource type |
 
 **Body**
 

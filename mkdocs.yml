@@ -1,0 +1,103 @@
+# Docs site, built by .github/workflows/pages.yml and published on GitHub Pages.
+# The pages are docs/en and docs/ja as they are; the home page is built from README.md and README.ja.md.
+site_name: Cloud Logging → ClickHouse
+site_description: Stream every Cloud Logging entry into ClickHouse Cloud with Pub/Sub ClickPipes, and search it in ClickStack.
+site_url: https://tkykenmt-at-ch.github.io/sample-google-cloud-logging-to-clickhouse/
+repo_url: https://github.com/tkykenmt-at-ch/sample-google-cloud-logging-to-clickhouse
+repo_name: sample-google-cloud-logging-to-clickhouse
+edit_uri: edit/main/docs/
+docs_dir: docs
+strict: true
+
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme)"
+      toggle:
+        icon: material/brightness-auto
+        name: Switch to light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: black
+      accent: amber
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: black
+      accent: amber
+      toggle:
+        icon: material/brightness-4
+        name: Switch to system preference
+  icon:
+    repo: fontawesome/brands/github
+  features:
+    - navigation.tracking
+    - navigation.top
+    - navigation.footer
+    - toc.follow
+    - search.highlight
+    - search.suggest
+    - content.code.copy
+
+plugins:
+  - search
+  - i18n:
+      docs_structure: folder
+      languages:
+        - locale: en
+          name: English
+          default: true
+          build: true
+        - locale: ja
+          name: 日本語
+          build: true
+          nav_translations:
+            Home: ホーム
+            Design: 設計
+            Setup: 導入
+            Setup in the browser: ブラウザで導入する
+            Hands-on: ハンズオン
+            Operations: 運用
+            Findings: 検証記録
+
+nav:
+  - Home: index.md
+  - Design: design.md
+  - Setup: setup.md
+  - Setup in the browser: setup-console.md
+  - Hands-on: hands-on.md
+  - Operations: operations.md
+  - Findings: findings.md
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - pymdownx.details
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - toc:
+      permalink: true
+      # Keep non-ASCII headings in anchors (Japanese headings).
+      slugify: !!python/object/apply:pymdownx.slugs.slugify
+        kwds:
+          case: lower
+
+extra:
+  generator: false
+
+validation:
+  anchors: warn
+  unrecognized_links: warn
+
+hooks:
+  - tools/mkdocs/hooks.py

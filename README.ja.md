@@ -4,6 +4,7 @@
 
 **Cloud Logging のログを Pub/Sub ClickPipes で ClickHouse Cloud に流し込み、ClickStack で検索する。**
 
+[![Docs](https://img.shields.io/badge/docs-site-black)](https://tkykenmt-at-ch.github.io/sample-google-cloud-logging-to-clickhouse/ja/)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 [![ClickHouse Cloud](https://img.shields.io/badge/ClickHouse_Cloud-26.6%2B-FAFF69?logo=clickhouse&logoColor=black)](https://clickhouse.com/cloud)
 [![Terraform](https://img.shields.io/badge/Terraform-%E2%89%A5_1.9-7B42BC?logo=terraform&logoColor=white)](terraform/)
@@ -73,6 +74,8 @@ gcloud と clickhousectl で 1 つずつ作りながら仕組みを確かめる�
 
 ## ドキュメント
 
+同じ文書は検索つきの [ドキュメントサイト](https://tkykenmt-at-ch.github.io/sample-google-cloud-logging-to-clickhouse/ja/) でも読めます。
+
 | ドキュメント | 内容 |
 |---|---|
 | [設計](docs/ja/design.md) | 要点、層の役割、L2 を作る判断、費用の見積もり方、利用者の環境で決めること、設計の詳細 |
@@ -97,6 +100,7 @@ gcloud と clickhousectl で 1 つずつ作りながら仕組みを確かめる�
 | `verify/checks.sql` | 遅延、処理が停滞したバッチ、重複、遅延到着、解析の状態などの定期確認 |
 | `tools/chq.py` | SQL ファイルを 1 文ずつ `clickhousectl cloud service query` で実行する |
 | `tools/wait_subscriptions_gone.py` | ClickPipes が管理サブスクリプションを削除し終えるのを待つ（`terraform destroy` が使う） |
+| `mkdocs.yml`, `tools/mkdocs/` | `docs/` と README から作るドキュメントサイト。`.github/workflows/pages.yml` が GitHub Pages に公開する |
 
 </details>
 

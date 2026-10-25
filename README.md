@@ -4,6 +4,7 @@
 
 **Stream every Cloud Logging entry into ClickHouse Cloud with Pub/Sub ClickPipes, and search it in ClickStack.**
 
+[![Docs](https://img.shields.io/badge/docs-site-black)](https://tkykenmt-at-ch.github.io/sample-google-cloud-logging-to-clickhouse/)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 [![ClickHouse Cloud](https://img.shields.io/badge/ClickHouse_Cloud-26.6%2B-FAFF69?logo=clickhouse&logoColor=black)](https://clickhouse.com/cloud)
 [![Terraform](https://img.shields.io/badge/Terraform-%E2%89%A5_1.9-7B42BC?logo=terraform&logoColor=white)](terraform/)
@@ -73,6 +74,8 @@ To build the pieces one at a time with gcloud and clickhousectl and see what eac
 
 ## Documents
 
+The same documents are also on the [docs site](https://tkykenmt-at-ch.github.io/sample-google-cloud-logging-to-clickhouse/), with search.
+
 | Document | Contents |
 |---|---|
 | [Design](docs/en/design.md) | Key points, layer roles, when to build an L2, cost estimation, decisions for your environment, design details |
@@ -97,6 +100,7 @@ To build the pieces one at a time with gcloud and clickhousectl and see what eac
 | `verify/checks.sql` | Periodic checks: latency, stuck batches, duplicates, late arrivals, parser health |
 | `tools/chq.py` | Runs SQL files one statement at a time through `clickhousectl cloud service query` |
 | `tools/wait_subscriptions_gone.py` | Waits until ClickPipes has deleted its managed subscription (used by `terraform destroy`) |
+| `mkdocs.yml`, `tools/mkdocs/` | Docs site built from `docs/` and the README, published to GitHub Pages by `.github/workflows/pages.yml` |
 
 </details>
 

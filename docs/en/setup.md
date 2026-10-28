@@ -88,7 +88,7 @@ All variables and defaults are in `terraform/variables.tf`, and invalid values a
 | `landing_ttl_days` | 7 | Ingest delay + switch and backfill + verification and rollback, plus a margin |
 | `logs_ttl_days` | 400 | Log retention requirement |
 | `pipe_seek_type` | `latest` | Start position of a new managed subscription. Leave as is: the topic keeps no messages |
-| `pipe_replicas` etc. | 1 replica, smallest size | Increase after measuring volume and delay |
+| `pipe_replicas` etc. | 1 replica, smallest size (about 7 MB/s) | A trial value. In production, use the size and number from "Estimating size" in [design](design.md) |
 | `clickstack_connection_id` | None | To create the ClickStack source and dashboard (step 4) |
 
 ### 3. Check the plan, then apply

@@ -20,7 +20,7 @@ L0 と L1 の作り直しと切り替えは、復旧や構成の見直しのと�
 | 処理が停滞したバッチ | 2 番 | 0 より大きい | 「MV のエラーの検知と復旧」 |
 | 失敗した INSERT | 6 番 | 1 件以上 | 「MV のエラーの検知と復旧」 |
 | 取り込めなかったメッセージ | 10 番（ClickPipes のエラーテーブル `gcl_landing_v1_clickpipes_error`、保持 7 日） | 1 件以上（L0 には仮想列だけを入れるので、平常時は 0 件） | `error_msg` で原因を確かめる。メッセージ全体が `record_value` に残り、環境（プロジェクト）は `logName` から分かる |
-| 取り込みの遅れ | 1 番 | p99 が 10 秒を超えて増え続ける | パイプのレプリカを増やす。Pub/Sub の未処理メッセージの経過時間も見る |
+| 取り込みの遅れ | 1 番 | p99 が 10 秒を超えて増え続ける | [トラブルシューティング](troubleshooting.md) の「取り込みが遅れる」 |
 | 重複 | 3 番 | 障害や一時停止の後に増えた | 検索側で除くか、付録 A2 で該当日を作り直す |
 | パイプの状態 | `clickhousectl cloud clickpipe get <service id> <pipe id>`（パイプの ID は `terraform output clickpipe_id`） | Failed | 「MV のエラーの検知と復旧」 |
 

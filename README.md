@@ -78,10 +78,11 @@ The same documents are also on the [docs site](https://tkykenmt-at-ch.github.io/
 
 | Document | Contents |
 |---|---|
-| [Design](docs/en/design.md) | Key points, layer roles, when to build an L2, cost estimation, decisions for your environment, design details |
+| [Design](docs/en/design.md) | Key points, layer roles, when to build an L2, cost estimation, size estimation, decisions for your environment, design details |
 | [Setup](docs/en/setup.md) | Cautions before you start, deploying with Terraform, changing settings, removal |
 | [Setup in the browser](docs/en/setup-console.md) | Without Terraform: the same configuration built only in the Google Cloud and ClickHouse Cloud consoles, with screenshots |
 | [Hands-on](docs/en/hands-on.md) | Part 1 runs the SQL on a local `clickhouse local`; part 2 deploys to real services with Terraform and searches in ClickStack; part 3 builds the same pieces one at a time with gcloud and clickhousectl |
+| [Troubleshooting](docs/en/troubleshooting.md) | Narrowing down ingest delay, inserts spanning too many partitions, and part counts from the symptom |
 | [Operations](docs/en/operations.md) | Daily checks, noise rules, L2 and L3, MV failures, operations to avoid, retention, switching production logs, rebuilding L0 and L1 (appendix) |
 | [Findings](docs/en/findings.md) | Observed behavior and measurements |
 
@@ -97,7 +98,7 @@ The same documents are also on the [docs site](https://tkykenmt-at-ch.github.io/
 | `loadgen/gen_logentry.py` | Synthetic LogEntry generator and Pub/Sub publisher (standard library only) |
 | `verify/local_e2e.sh` | End-to-end check of the SQL on a local ClickHouse |
 | `verify/completeness.sh` | Reconciles every published message ID with L0 and L1 |
-| `verify/checks.sql` | Periodic checks: latency, stuck batches, duplicates, late arrivals, parser health |
+| `verify/checks.sql` | Periodic checks: latency, stuck batches, duplicates, late arrivals, parser health, backlog, pipe inserts, part counts |
 | `tools/chq.py` | Runs SQL files one statement at a time through `clickhousectl cloud service query` |
 | `tools/wait_subscriptions_gone.py` | Waits until ClickPipes has deleted its managed subscription (used by `terraform destroy`) |
 | `mkdocs.yml`, `tools/mkdocs/` | Docs site built from `docs/` and the README, published to GitHub Pages by `.github/workflows/pages.yml` |
@@ -107,7 +108,7 @@ The same documents are also on the [docs site](https://tkykenmt-at-ch.github.io/
 ## Out of scope
 
 - Mapping Logs Explorer features to ClickStack features
-- Sizing pipes and services for a given volume (the load tests in the findings are small)
+- Confirming pipe and service sizes by load testing (the estimate in [design](docs/en/design.md) follows the official guidelines, and the load tests in the findings are small)
 - Changing the `_Default` bucket sink (moving production logs over follows your own change process)
 
 ## License

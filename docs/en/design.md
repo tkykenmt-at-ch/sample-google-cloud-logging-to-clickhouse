@@ -18,6 +18,7 @@ Deployment is in [Setup](setup.md), a guided run is in the [Hands-on](hands-on.m
 - **Architecture**: a Cloud Logging sink sends every log to Pub/Sub, and ClickPipes ingests them into ClickHouse Cloud. Two layers are required: L0 keeps the messages as delivered, and L1 is the table you search.
 - **Usage**: every kind of log lands in L1, so search, value extraction, and dashboards start in L1. Typed tables per log kind (L2) and aggregate tables (L3) are added only when L1 cannot meet a requirement.
 - **When Cloud Logging costs go down**: sending logs to Pub/Sub does not by itself reduce Cloud Logging costs. Costs drop when you stop storing logs in the `_Default` bucket. Before that, list the features that depend on the logs in `_Default`.
+- **Size**: derive the ingest rate from the billable Cloud Logging volume, and size the ClickPipes replicas and the service with the official guidelines. The ClickPipes default (one replica of the smallest size) is meant for trials and may not keep up with production volume.
 - **New costs**: Pub/Sub throughput, ClickPipes, and ClickHouse Cloud. Pub/Sub charges also apply to logs that Cloud Logging does not bill, so measure while running both paths in parallel.
 - **Japanese search**: with a 2-character n-gram full-text index on the body, ClickStack can search Japanese words.
 - **Decisions for your environment**: target projects, retention per log kind, who can see what, and what to do with past logs.
@@ -185,6 +186,44 @@ The Pub/Sub free tier is 10 GiB per billing account per month, shared by publish
   Messages older than one day incur storage charges. (docs: [storage costs](https://cloud.google.com/pubsub/pricing#storage_costs))
   Delete pipes you no longer use.
 
+## Estimating size
+
+Size the ClickPipes replicas and the ClickHouse Cloud service from the same ingest rate. The estimate is a starting point based on the official guidelines; once the parallel run starts, confirm with the checks in [troubleshooting](troubleshooting.md) that nothing backs up.
+
+**Ingest rate**
+
+| Step | How | Source |
+|---|---|---|
+| 1. Monthly volume | Billable Cloud Logging ingestion (`logging.googleapis.com/billing/bytes_ingested`, or Log Storage on the bill). During the parallel run, the sink's exported bytes (`logging.googleapis.com/exports/byte_count`) | Your environment |
+| 2. Average rate | Monthly volume ÷ 2,592,000 seconds (30 days) | Arithmetic |
+| 3. Bytes sent to Pub/Sub | The JSON a sink exports is larger than the billable volume. Once the parallel run starts, measure the ratio of exported to billable bytes and apply it | Your environment |
+| 4. Logs routed to `_Required` | Add them if the sink exports them; the volume depends heavily on the log mix | Your environment |
+| 5. Peak | Look at `bytes_ingested` per minute and multiply by the peak-to-average ratio | Your environment |
+
+Example (illustrative numbers): 10 TiB billable per month averages 10 × 1,099,511,627,776 ÷ 2,592,000 ≈ 4.2 MB/s. If the sink exports 1.2 times the billable bytes, about 5.1 MB/s goes to Pub/Sub.
+
+**ClickPipes replicas**
+
+| Size | vCPU, memory | Expected throughput |
+|---|---|---|
+| XS (default) | 0.125, 512 MiB | 7 MB/s |
+| S | 0.25, 1 GiB | 15 MB/s |
+| M | 0.5, 2 GiB | 31 MB/s |
+| L | 1, 4 GiB | 63 MB/s |
+| XL | 2, 8 GiB | 126 MB/s |
+
+- Sizes, vCPU and memory are from the docs ([replica sizes](https://clickhouse.com/docs/products/cloud/reference/billing/clickpipes/clickpipes-for-streaming-and-object-storage)).
+- The only published throughput is for Kafka ClickPipes: L at 63 MB/s for JSON (1.6 KB messages, an informal benchmark with ClickHouse not the bottleneck) ([benchmarks](https://clickhouse.com/docs/integrations/clickpipes/kafka/best-practices)). The other sizes scale it by vCPU and round down. No throughput is published for Pub/Sub ClickPipes.
+- Pick a size above the peak rate and run two or more replicas. Two or more give an availability-zone-distributed setup ([docs](https://clickhouse.com/docs/integrations/clickpipes/pubsub/overview#scaling)); ClickPipes spreads the managed subscription's messages across the replicas.
+- Total throughput also sets how fast the pipe catches up after a stop: with rate F, total throughput C and a stop of T hours, catching up takes T × F ÷ (C − F) hours. The managed subscription keeps messages 7 days, so leave room to catch up well within that.
+- The default (one XS replica) handles about 7 MB/s: enough for a trial, possibly not for production. In production, set `pipe_replicas` and related variables in [setup](setup.md), and the size in [setup in the browser](setup-console.md), to this estimate.
+
+**Service**
+
+- For ingest, plan 1 vCPU per 10 MB/s of sustained (uncompressed) ingest. For queries, plan another 1 vCPU per 1 QPS per 10 MB/s of ingest ([ClickStack resource estimation](https://clickhouse.com/docs/clickstack/managing/estimating-resources)).
+- A larger pipe also delivers more to the service; while it works off a backlog, up to the pipe's total throughput.
+- Keep the autoscaling maximum at or above the vCPU needed for ingest and queries together.
+
 ## Decisions for your environment
 
 | Setting | Value in this sample | How to decide |
@@ -192,7 +231,7 @@ The Pub/Sub free tier is 10 GiB per billing account per month, shared by publish
 | Sink scope | All logs of the project | An aggregated sink for multiple projects |
 | Topic message retention | None | Enable briefly only when a pipe swap must seek back |
 | Topic storage region | Not restricted (Terraform default) | Pin it to the region of the ClickHouse Cloud service (`topic_storage_regions`); crossing regions adds delivery egress charges |
-| ClickPipes replicas | One (smallest size) | Measure volume and latency |
+| ClickPipes replicas | One (smallest size) | From the ingest rate in "Estimating size"; confirm there is no backlog during the parallel run |
 | ClickPipes insert wait | 5 s (`streaming_max_insert_wait_ms` default) | In testing the pipe inserted 212 rows on average every 7.7 s, creating a part in four tables per insert. With little volume and too many parts, raise it (logs then take longer to appear; effect not tested) |
 | L0 retention | 7 days | Ingest delay + switch and backfill + reconciliation and rollback, plus margin |
 | L1 retention | 400 days | Retention requirements per log kind and privacy rules |
@@ -288,7 +327,7 @@ Treat ClickHouse as a copy for analysis alongside other logs.
   It is deleted with the pipe and kept when the pipe is only stopped. (verified)
 - Unacknowledged messages on the managed subscription incur no storage charge within one day of publishing. If ingestion stops for more than a day, the backlog starts incurring storage. (docs: [storage costs](https://cloud.google.com/pubsub/pricing#storage_costs))
 - The pipe inserts about every 5 seconds. Publish to stored took about 3 s at the median and about 5 s at p99. (verified)
-- Start with the default single replica (smallest size) and add replicas and size while measuring latency. (docs; values for your volume are PoC)
+- Size and number of replicas come from the ingest rate in "Estimating size". The default is one replica of the smallest size (XS). (docs; values for your volume are PoC)
 
 **Authentication and network**
 

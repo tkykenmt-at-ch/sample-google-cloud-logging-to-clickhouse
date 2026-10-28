@@ -78,10 +78,11 @@ gcloud と clickhousectl で 1 つずつ作りながら仕組みを確かめる�
 
 | ドキュメント | 内容 |
 |---|---|
-| [設計](docs/ja/design.md) | 要点、層の役割、L2 を作る判断、費用の見積もり方、利用者の環境で決めること、設計の詳細 |
+| [設計](docs/ja/design.md) | 要点、層の役割、L2 を作る判断、費用の見積もり方、大きさの見積もり方、利用者の環境で決めること、設計の詳細 |
 | [導入](docs/ja/setup.md) | 始める前の注意、Terraform での構築、作成後の設定の変更、削除 |
 | [ブラウザで導入する](docs/ja/setup-console.md) | Terraform を使えない環境向けに、同じ構成を Google Cloud と ClickHouse Cloud の画面だけで作る（画面の画像つき） |
 | [ハンズオン](docs/ja/hands-on.md) | ローカルの `clickhouse local` だけで SQL を動かす第 1 部、Terraform で実環境に構築して ClickStack で検索する第 2 部、同じものを gcloud と clickhousectl で 1 つずつ作る第 3 部 |
+| [トラブルシューティング](docs/ja/troubleshooting.md) | 取り込みの遅れ、1 回の INSERT がまたぐパーティション、パーツの数を、症状から切り分ける手順 |
 | [運用](docs/ja/operations.md) | 日常の確認、ノイズの除去、L2 と L3、MV のエラーへの対処、避ける操作、保持期間の変更、本番ログへの切り替え、L0・L1 の作り直し（付録） |
 | [検証記録](docs/ja/findings.md) | 実機で確かめた挙動と数値 |
 
@@ -97,7 +98,7 @@ gcloud と clickhousectl で 1 つずつ作りながら仕組みを確かめる�
 | `loadgen/gen_logentry.py` | 合成 LogEntry の生成と Pub/Sub への公開（標準ライブラリのみ） |
 | `verify/local_e2e.sh` | ローカルの ClickHouse で SQL 一式を通して確認する |
 | `verify/completeness.sh` | 公開したメッセージ ID の全件と L0、L1 を突き合わせる |
-| `verify/checks.sql` | 遅延、処理が停滞したバッチ、重複、遅延到着、解析の状態などの定期確認 |
+| `verify/checks.sql` | 遅延、処理が停滞したバッチ、重複、遅延到着、解析の状態、滞留、パイプの INSERT、パーツの数などの定期確認 |
 | `tools/chq.py` | SQL ファイルを 1 文ずつ `clickhousectl cloud service query` で実行する |
 | `tools/wait_subscriptions_gone.py` | ClickPipes が管理サブスクリプションを削除し終えるのを待つ（`terraform destroy` が使う） |
 | `mkdocs.yml`, `tools/mkdocs/` | `docs/` と README から作るドキュメントサイト。`.github/workflows/pages.yml` が GitHub Pages に公開する |
@@ -107,7 +108,7 @@ gcloud と clickhousectl で 1 つずつ作りながら仕組みを確かめる�
 ## 対象外
 
 - Cloud Logging の Logs Explorer の機能と ClickStack の機能の対応付け
-- 取り込み量に応じたパイプとサービスのサイズの選定（検証記録の負荷試験は小規模です）
+- 負荷試験によるパイプとサービスの大きさの確定（[設計](docs/ja/design.md) の見積もりは公式の目安によるもので、検証記録の負荷試験は小規模です）
 - `_Default` バケットのシンクの変更（本番ログへの切り替えは利用者の環境で定めた手順で行います）
 
 ## ライセンス

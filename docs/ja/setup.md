@@ -98,7 +98,7 @@ cp terraform.tfvars.example terraform.tfvars
 | `landing_ttl_days` | 7 | 取り込みの遅延、切り替えとバックフィル、照合とロールバックに必要な期間に余裕を加える |
 | `logs_ttl_days` | 400 | ログの保持要件 |
 | `pipe_seek_type` | `latest` | 新しい管理サブスクリプションの開始位置。トピックに保持がないので、通常は変えない |
-| `pipe_replicas` など | 1 レプリカ、最小サイズ | 取り込み量と遅延を測って増やす |
+| `pipe_replicas` など | 1 レプリカ、最小サイズ（約 7 MB/s） | 検証向けの値。本番では [設計](design.md) の「大きさの見積もり方」で決めた大きさと数にする |
 | `clickstack_connection_id` | なし | ClickStack のソースとダッシュボードを作るとき（下の 4） |
 
 ### 3. 計画を確かめてから適用する

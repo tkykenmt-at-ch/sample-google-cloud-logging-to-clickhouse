@@ -18,7 +18,10 @@
 
 ### 1. 遅れを測る
 
-16 番で、直近 10 分に L1 に入った行について、Pub/Sub に公開されてから入るまでの遅れを見ます。
+いちばん手早いのは、ClickHouse Cloud Console でパイプを開き、Metrics タブの「Latency (s)」のグラフを見ることです。
+同じ値は Prometheus のエンドポイントの `ClickPipes_Latency` でも取れます（[ClickPipes のモニタリング](https://clickhouse.com/docs/integrations/clickpipes/monitoring)）。
+
+ClickHouse 側からは、16 番で、直近 10 分に L1 に入った行について、Pub/Sub に公開されてから入るまでの遅れを見ます。
 パイプは遅くとも 5 秒ごとに INSERT するので、追いついていれば遅れは数秒です。
 数分以上の値が出たり、増え続けたりする場合は、次へ進みます。
 
@@ -76,6 +79,14 @@ L0 は公開日でパーティションを分けているので、追いつい�
 - 11 番で、今日の日付だけが出る。
 - 16 番の遅れが数秒に戻る。
 - Pub/Sub の 2 つの指標が下がり、横ばいになる。
+
+### 遅れの監視
+
+ClickPipes の通知（メール、コンソール、Slack）は、パイプの失敗や問題のときに届きます（[通知](https://clickhouse.com/docs/products/cloud/features/monitoring/notifications)）。
+処理が追いつかないだけではパイプは Running のままなので、遅れは次のどちらかで監視します。
+
+- Cloud Monitoring で、管理サブスクリプションの `oldest_unacked_message_age_by_region` にアラートを設定する
+- Prometheus のエンドポイントから `ClickPipes_Latency` を取り込み、利用中の監視ツールでアラートを設定する
 
 ### 滞留が長く続いた場合の注意
 

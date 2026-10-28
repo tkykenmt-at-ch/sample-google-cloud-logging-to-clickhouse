@@ -16,7 +16,9 @@ How to narrow down an ingest problem from the symptom to its cause and fix. Quer
 
 ### 1. Measure the delay
 
-Check 16 shows, for the rows that reached L1 in the last 10 minutes, the delay from Pub/Sub publish. The pipe inserts at least every 5 seconds, so the delay is a few seconds when it keeps up. If you see minutes, or a value that keeps growing, go on.
+The quickest way is the "Latency (s)" chart on the pipe's Metrics tab in the ClickHouse Cloud Console. The same value is available as `ClickPipes_Latency` on the Prometheus endpoint ([ClickPipes monitoring](https://clickhouse.com/docs/integrations/clickpipes/monitoring)).
+
+From ClickHouse, check 16 shows, for the rows that reached L1 in the last 10 minutes, the delay from Pub/Sub publish. The pipe inserts at least every 5 seconds, so the delay is a few seconds when it keeps up. If you see minutes, or a value that keeps growing, go on.
 
 Check 1 selects rows by publish time, so during a backlog it returns few rows. Fewer rows than usual in check 1 are also a sign of delay.
 
@@ -65,6 +67,13 @@ With rate F, total throughput C and a delay of T, catching up takes T × F ÷ (C
 - Check 11 shows only today's date.
 - The delay in check 16 is back to a few seconds.
 - Both Pub/Sub metrics fall and level off.
+
+### Monitoring the delay
+
+ClickPipes notifications (email, console, Slack) are sent when a pipe has failures or issues ([notifications](https://clickhouse.com/docs/products/cloud/features/monitoring/notifications)). A pipe that only falls behind stays Running, so monitor the delay with one of these:
+
+- An alert in Cloud Monitoring on the managed subscription's `oldest_unacked_message_age_by_region`
+- `ClickPipes_Latency` scraped from the Prometheus endpoint, with an alert in your monitoring tool
 
 ### When the backlog lasted long
 

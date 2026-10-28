@@ -192,6 +192,8 @@ The MVs do the parsing, so L0 gets only the virtual columns.
 
 **Details and settings**: under Permissions, choose "Only destination" and press "Create ClickPipe".
 
+By default the pipe runs one replica of the smallest size (XS), which handles about 7 MB/s. Before sending production logs, change it under Settings → Advanced Settings → Scaling to the size and number (two or more) from "Estimating size" in [design](design.md).
+
 ![Permissions](../images/console/06g_clickpipe_details.png)
 
 The page warns "No access to Materialized Views"; that does not apply here.

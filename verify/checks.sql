@@ -103,3 +103,85 @@ FROM gcl.gcl_landing_v1_clickpipes_error
 WHERE error_timestamp > now() - INTERVAL 7 DAY
 GROUP BY hour, error_type, ProjectId
 ORDER BY hour DESC;
+
+-- 11. Backlog: rows written to L0 in the last hour, by publish date (L0 is partitioned by publish date).
+--     Only today's date when the pipe keeps up; earlier dates mean it is still working through old messages.
+SELECT partition AS publish_date, count() AS new_parts, sum(rows) AS rows
+FROM clusterAllReplicas('default', system.part_log)
+WHERE event_time > now() - INTERVAL 1 HOUR AND event_type = 'NewPart' AND database = 'gcl' AND table = 'gcl_landing_v1'
+GROUP BY publish_date
+ORDER BY publish_date;
+
+-- 12. Pipe inserts per 10 minutes: how often, how long each took, and the share of time spent inserting.
+--     With a backlog, inserts every ~5 s that finish well within the interval mean the pipe, not the service,
+--     is the limit. busy_ratio can exceed 1 with several pipe replicas inserting at once.
+SELECT
+    user,
+    toStartOfTenMinutes(event_time) AS ten_minutes,
+    count() AS inserts,
+    round(quantile(0.5)(query_duration_ms) / 1000, 2) AS p50_duration_s,
+    round(max(query_duration_ms) / 1000, 2) AS max_duration_s,
+    round(sum(query_duration_ms) / 1000 / 600, 2) AS busy_ratio
+FROM clusterAllReplicas('default', system.query_log)
+WHERE user LIKE 'clickpipe:%' AND query_kind = 'Insert' AND type = 'QueryFinish'
+  AND event_time >= toStartOfTenMinutes(now()) - INTERVAL 1 HOUR AND event_time < toStartOfTenMinutes(now())
+GROUP BY user, ten_minutes
+ORDER BY user, ten_minutes;
+
+-- 13. Rows per pipe insert into L0. A batch closes at 100,000 rows, 32 MB per GB of replica memory, or 5 s
+--     (https://clickhouse.com/docs/integrations/clickpipes/pubsub/overview). Far below the size limits with a
+--     backlog: the pipe cannot fill a batch in 5 s.
+SELECT
+    toStartOfTenMinutes(t) AS ten_minutes,
+    count() AS inserts,
+    round(avg(rows)) AS avg_rows_per_insert,
+    max(rows) AS max_rows_per_insert,
+    formatReadableSize(avg(bytes)) AS avg_uncompressed_per_insert
+FROM (
+    SELECT query_id, min(event_time) AS t, sum(rows) AS rows, sum(bytes_uncompressed) AS bytes
+    FROM clusterAllReplicas('default', system.part_log)
+    WHERE event_time >= toStartOfTenMinutes(now()) - INTERVAL 1 HOUR AND event_time < toStartOfTenMinutes(now())
+      AND event_type = 'NewPart' AND database = 'gcl' AND table = 'gcl_landing_v1'
+    GROUP BY query_id)
+GROUP BY ten_minutes
+ORDER BY ten_minutes;
+
+-- 14. L1 partitions written by one insert. Above 100 the insert fails (max_partitions_per_insert_block).
+--     Cloud Logging routes entries with old timestamps to sinks, so this depends on the spread of Timestamp
+--     within a batch, not on the L1 TTL.
+SELECT count() AS inserts, max(partitions) AS max_partitions, round(avg(partitions), 1) AS avg_partitions
+FROM (
+    SELECT query_id, uniqExact(partition_id) AS partitions
+    FROM clusterAllReplicas('default', system.part_log)
+    WHERE event_time > now() - INTERVAL 1 DAY AND event_type = 'NewPart' AND database = 'gcl' AND table = 'gcl_logs_v1'
+    GROUP BY query_id);
+
+-- 15. L1 parts per partition by partition age. max_parts_in_total (10,000 on Cloud) counts every active part of
+--     the table, so with daily partitions kept 400 days the older partitions have to merge down to a few parts.
+SELECT
+    multiIf(age_days <= 1, '1: today, yesterday', age_days <= 7, '2: 2-7 days', '3: older') AS age,
+    count() AS partitions,
+    sum(n) AS parts,
+    round(avg(n), 1) AS avg_parts_per_partition,
+    max(n) AS max_parts_per_partition,
+    (SELECT count() FROM system.parts WHERE active AND database = 'gcl' AND table = 'gcl_logs_v1') AS table_parts
+FROM (
+    SELECT partition, dateDiff('day', toDate(partition), today()) AS age_days, count() AS n
+    FROM system.parts
+    WHERE active AND database = 'gcl' AND table = 'gcl_logs_v1'
+    GROUP BY partition)
+GROUP BY age
+ORDER BY age;
+
+-- 16. Delay of the rows inserted in the last 10 minutes. Check 1 selects by publish time, so during a backlog it
+--     returns few rows; this one selects by insert time and shows how far behind the pipe is. It reads 8 days of
+--     L1 to catch rows published long ago, so it can take tens of seconds.
+SELECT
+    toStartOfMinute(InsertedAt) AS minute,
+    count() AS rows,
+    formatReadableTimeDelta(quantile(0.5)(dateDiff('second', PublishTime, InsertedAt))) AS p50_delay,
+    formatReadableTimeDelta(max(dateDiff('second', PublishTime, InsertedAt))) AS max_delay
+FROM gcl.gcl_logs_v1
+WHERE Timestamp > now() - INTERVAL 8 DAY AND InsertedAt > now() - INTERVAL 10 MINUTE
+GROUP BY minute
+ORDER BY minute;

@@ -186,6 +186,42 @@ The Pub/Sub free tier is 10 GiB per billing account per month, shared by publish
   Messages older than one day incur storage charges. (docs: [storage costs](https://cloud.google.com/pubsub/pricing#storage_costs))
   Delete pipes you no longer use.
 
+## Estimating cost from PoC measurements
+
+Once production volume is flowing, estimate the monthly cost from what you measure in your own environment. Every input comes from your Cloud Logging, Pub/Sub and ClickHouse Cloud. A spreadsheet template is in `verify/cost_estimate.csv` (in Google Sheets, File → Import keeps the formulas working).
+
+**Baseline period**
+
+- Average the per-day volumes of one week that includes weekdays and weekends. Log volume changes by day of week, so a few days are biased.
+- Do not average by insert time over a period when ingestion was behind or catching up. L1 is partitioned by log timestamp and L0 by publish date, so rows that arrived late still count on their own day.
+- Leave out today: it is partial and its parts are not merged yet.
+
+**What to measure**
+
+| Volume | How |
+|---|---|
+| Stored size per day (compressed) and compression ratio | Check 17 in `verify/checks.sql` (per table and day) |
+| Bytes read by ClickPipes | The pipe's Metrics tab, or `ClickPipes_FetchedBytes_Total` from the Prometheus endpoint ([ClickPipes monitoring](https://clickhouse.com/docs/integrations/clickpipes/monitoring)) |
+| Pub/Sub publish and delivery bytes billed | `topic/byte_cost` and `subscription/byte_cost` from "What to measure while running in parallel" above. After a month of parallel running, compare with the "Message Delivery Basic" SKU on the bill |
+| Service compute, storage and backups | ClickHouse Cloud console, Settings → Usage breakdown (per day, at list price, downloadable as CSV; [tracking spend](https://clickhouse.com/docs/products/cloud/reference/billing/billing-overview#how-can-i-keep-track-of-my-spending)) |
+| Billable Cloud Logging volume | The usage of the "Log Storage cost" SKU in the billing report filtered to Cloud Logging, or `logging.googleapis.com/billing/bytes_ingested` |
+
+**Putting it together**
+
+| Item | Formula |
+|---|---|
+| Storage | (L1 compressed per day × L1 retention days + L0 compressed per day × L0 retention days) × storage price |
+| Backups | current backups ÷ current storage × the storage above |
+| Service compute | compute per day from Usage breakdown × days. If production uses a plan with a different price, multiply by the price ratio |
+| ClickPipes | total replica units × compute price × hours + bytes read × ingested-data price |
+| Pub/Sub | (publish bytes billed + delivery bytes billed) × $40/TiB |
+| Keeping the logs in Cloud Logging instead | billable volume × $0.50/GiB + billable volume × (retention days − 30) ÷ 30.42 × $0.01/GiB (retention beyond 30 days, [pricing](https://cloud.google.com/stackdriver/pricing)) |
+
+- Take each price from its pricing page with your cloud, region and plan selected ([ClickHouse Cloud](https://clickhouse.com/pricing), [ClickPipes](https://clickhouse.com/docs/products/cloud/reference/billing/clickpipes/clickpipes-for-streaming-and-object-storage), [Pub/Sub](https://cloud.google.com/pubsub/pricing)). For Pub/Sub ClickPipes pricing, ask ClickHouse as noted in "Cost items" above.
+- Compute measured during the PoC covers ingestion only. Add search once the representative queries are measured ("Service" under "Estimating size" below).
+- Storage is the steady state once logs for the full retention have accumulated. During the migration, add the cost of keeping logs in both Cloud Logging and ClickHouse.
+- Compare with Cloud Logging on the same billable volume. Pub/Sub and ClickPipes volumes are the size of the JSON the sink exports, which is larger than the billable Cloud Logging volume ("Points to watch" above).
+
 ## Estimating size
 
 Size the ClickPipes replicas and the ClickHouse Cloud service from the same ingest rate. The estimate is a starting point based on the official guidelines; once the parallel run starts, confirm with the checks in [troubleshooting](troubleshooting.md) that nothing backs up.

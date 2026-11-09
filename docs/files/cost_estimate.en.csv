@@ -1,19 +1,20 @@
 Item,Value,Unit,Where to get it
 L1 retention,400,days,Design value
 L0 retention,7,days,Design value
-L1 on-disk size per day,,GB,Weekly average of on_disk_gb for gcl_logs_v1 in check 17 of checks.sql. Add L2 and aggregate tables if you build them
-L0 on-disk size per day,,GB,Weekly average of on_disk_gb for gcl_landing_v1 in check 17 of checks.sql
-Bytes read by ClickPipes per day,,GB,The pipe's Metrics tab or the daily increase of ClickPipes_FetchedBytes_Total from the Prometheus endpoint
-Pub/Sub publish bytes billed per day,,GiB,Cloud Monitoring pubsub.googleapis.com/topic/byte_cost
-Pub/Sub delivery bytes billed per day,,GiB,Cloud Monitoring pubsub.googleapis.com/subscription/byte_cost summed over every subscription that reads the topic (includes acks and ack deadline extensions)
-Billable Cloud Logging volume per month,,GiB,Usage of the Log Storage cost SKU on the bill or logging.googleapis.com/billing/bytes_ingested
-Service compute per day,,USD,Compute in the console's Usage breakdown (list price of the current plan)
-Current storage per day,,USD,Storage in Usage breakdown (same day)
-Current backups per day,,USD,Backups in Usage breakdown (same day)
+L1 on-disk size per day,,GB,B4 from tools/cost_inputs.py (weekly average of on_disk_gb for gcl_logs_v1 in check 17 of checks.sql). Add L2 and aggregate tables if you build them
+L0 on-disk size per day,,GB,B5 from tools/cost_inputs.py (on_disk_gb for gcl_landing_v1 in check 17)
+Bytes read by ClickPipes per day,,GB,B6 from tools/cost_inputs.py (uncompressed size of L0); the pipe's Metrics tab also works
+Pub/Sub publish bytes billed per day,,GiB,B7 from tools/cost_inputs.py (Cloud Monitoring pubsub.googleapis.com/topic/byte_cost)
+Pub/Sub delivery bytes billed per day,,GiB,B8 from tools/cost_inputs.py (subscription/byte_cost summed over every subscription that reads the topic)
+Billable Cloud Logging volume per month,,GiB,"B9 from tools/cost_inputs.py (logging.googleapis.com/billing/bytes_ingested), or the usage of the Log Storage cost SKU on the bill"
+Service compute per day,,USD,"B10 from tools/cost_inputs.py (Compute in ClickHouse Cloud usage, list price of the current plan)"
+Compute to add for search per day,0,unit-hours,"Once the representative queries are measured: CPU seconds from check 21 × runs per day ÷ 3,600 ÷ 2 (one unit is 2 vCPU)"
+Current storage per day,,USD,B12 from tools/cost_inputs.py (Storage in usage)
+Current backups per day,,USD,B13 from tools/cost_inputs.py (Backups in usage)
 Compute price of the current plan,,USD per unit-hour,Pricing page (select cloud / region / plan)
 Compute price of the production plan,,USD per unit-hour,Pricing page
 Storage price,,USD per TB-month,Pricing page
-Total ClickPipes replica units,1,units,L is 0.5 and XL is 1 (2 × L is 1)
+Total ClickPipes replica units,,units,"B17 from tools/cost_inputs.py (one unit per 8 GiB of replica memory: L is 0.5, 2 × L is 1)"
 ClickPipes compute price,0.20,USD per unit-hour,ClickPipes pricing page (ask ClickHouse for Pub/Sub pricing)
 ClickPipes ingested-data price,0.04,USD per GB,Same as above
 Pub/Sub throughput price,40,USD per TiB,Pub/Sub pricing page
@@ -22,11 +23,12 @@ Cloud Logging retention price beyond 30 days,0.01,USD per GiB-month,Same as abov
 Days per month,30.42,days,
 ,,,
 Monthly cost,,,
-Service compute,=B10*B14/B13*B22,USD,Current usage at the production plan's price (search load not included)
-Storage,=(B4*B2+B5*B3)/1000*B15,USD,Once logs for the full retention have accumulated
-Backups,=B12/B11*B26,USD,Current backup-to-storage ratio applied to the storage above
-ClickPipes,=B16*B17*24*B22+B6*B22*B18,USD,Compute plus ingested data
-Pub/Sub,=(B7+B8)*B22/1024*B19,USD,Publish plus delivery
-Total after moving to ClickHouse,=SUM(B25:B29),USD,
-Keeping the logs in Cloud Logging,=B9*B20+B9*(B2-30)/B22*B21,USD,Steady state with the same retention (free 50 GiB per project per month not included)
-Difference,=B31-B30,USD,
+Service compute,=(B10*B15/B14+B11*B15)*B23,USD,"Current usage at the production plan's price, plus search"
+Storage,=(B4*B2+B5*B3)/1000*B16,USD,Once logs for the full retention have accumulated
+Backups,=B13/B12*B27,USD,Current backup-to-storage ratio applied to the storage above
+ClickPipes,=B17*B18*24*B23+B6*B23*B19,USD,Compute plus ingested data
+Pub/Sub,=(B7+B8)*B23/1024*B20,USD,Publish plus delivery
+Total after moving to ClickHouse,=SUM(B26:B30),USD,"Steady state, full retention accumulated"
+Keeping the logs in Cloud Logging,=B9*B21+B9*(B2-30)/B23*B22,USD,Steady state with the same retention (free 50 GiB per project per month not included)
+Difference,=B32-B31,USD,
+Total after moving to ClickHouse (first-year average),"=B26+B29+B30+(B27+B28)*((B4*B2*IF(B2>=365,365/(2*B2),1-B2/730)+B5*B3)/(B4*B2+B5*B3))",USD,Starting empty: storage and backups grow until the full retention has accumulated

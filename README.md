@@ -80,7 +80,7 @@ The same documents are also on the [docs site](https://tkykenmt-at-ch.github.io/
 |---|---|
 | [Design](docs/en/01-design.md) | Key points, layer roles, when to build an L2, design details |
 | [Planning](docs/en/02-planning.md) | Decisions for your environment, sizing ClickPipes and the service |
-| [Estimating cost](docs/en/03-cost.md) | A rough estimate before the PoC, the monthly cost from PoC measurements, and the comparison with Cloud Logging, with a spreadsheet template |
+| [Estimating cost](docs/en/03-cost.md) | A rough estimate before the PoC, collecting the measurements (`tools/cost_inputs.py`) and the monthly cost, where the compute goes, and a worked example, with a spreadsheet template |
 | [Setup](docs/en/04-setup.md) | Cautions before you start, deploying with Terraform, changing settings, removal |
 | [Setup in the browser](docs/en/05-setup-console.md) | Without Terraform: the same configuration built only in the Google Cloud and ClickHouse Cloud consoles, with screenshots |
 | [Hands-on](docs/en/06-hands-on.md) | Part 1 runs the SQL on a local `clickhouse local`; part 2 deploys to real services with Terraform and searches in ClickStack; part 3 builds the same pieces one at a time with gcloud and clickhousectl |
@@ -103,6 +103,7 @@ The same documents are also on the [docs site](https://tkykenmt-at-ch.github.io/
 | `docs/files/cost_estimate.en.csv` | Spreadsheet template for the cost estimate (Japanese: `cost_estimate.csv`); also downloadable from the docs site |
 | `verify/checks.sql` | Periodic checks: latency, stuck batches, duplicates, late arrivals, parser health, backlog, pipe inserts, part counts |
 | `tools/chq.py` | Runs SQL files one statement at a time through `clickhousectl cloud service query` |
+| `tools/cost_inputs.py` | Collects the inputs of the cost estimate from Cloud Monitoring, the ClickHouse Cloud API and the system tables |
 | `tools/wait_subscriptions_gone.py` | Waits until ClickPipes has deleted its managed subscription (used by `terraform destroy`) |
 | `mkdocs.yml`, `tools/mkdocs/` | Docs site built from `docs/` and the README, published to GitHub Pages by `.github/workflows/pages.yml` |
 

@@ -186,7 +186,7 @@ WHERE Timestamp > now() - INTERVAL 8 DAY AND InsertedAt > now() - INTERVAL 10 MI
 GROUP BY minute
 ORDER BY minute;
 
--- 17. Stored size per day, to estimate storage at full retention (docs: planning, "Estimating cost from PoC
+-- 17. Stored size per day, to estimate storage at full retention (docs: 03-cost, "Estimating cost from PoC
 --     measurements"). L1 is partitioned by Timestamp and L0 by publish date, so a day's logs count on that day even
 --     when they were ingested late. Average complete days over a week with weekdays and weekends; today is partial
 --     and its parts are not merged yet. Storage is billed on on_disk_gb, which includes skip indexes (the text index

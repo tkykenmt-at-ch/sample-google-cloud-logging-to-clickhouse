@@ -1,10 +1,10 @@
 # Setup in the browser
 
-English | [日本語](../ja/04-setup-console.md)
+English | [日本語](../ja/05-setup-console.md)
 
-For environments without Terraform: the same configuration as [Setup](03-setup.md), built only in the Google Cloud console and the ClickHouse Cloud console.
+For environments without Terraform: the same configuration as [Setup](04-setup.md), built only in the Google Cloud console and the ClickHouse Cloud console.
 It replaces Terraform; do not run both.
-Read "Before you start" in [Setup](03-setup.md) first.
+Read "Before you start" in [Setup](04-setup.md) first.
 The screenshots were taken on 2026-10-05.
 
 It creates the same resources as Setup, except the ClickStack dashboard (Terraform only).
@@ -123,7 +123,7 @@ When it is, choose it: no key is created, so there is nothing to store or rotate
 
 This service account belongs to the ClickHouse Cloud service; nothing is created in your project.
 Skip creating a service account and key ("With a key file" below) and go to step 6.
-In testing, the connection check in step 7 passed right after the role was granted ([Findings](08-findings.md), "Workload identity").
+In testing, the connection check in step 7 passed right after the role was granted ([Findings](09-findings.md), "Workload identity").
 
 ### With a key file
 
@@ -198,7 +198,7 @@ By default the pipe runs one replica of the smallest size (XS), which handles ab
 
 The page warns "No access to Materialized Views"; that does not apply here.
 The MVs have `SQL SECURITY DEFINER` and write to L1 and the aggregate tables with the definer's (`default`) rights.
-In testing, the pipe user had grants on L0 and its error table only, and L1 and the aggregate tables filled with no loss ([Findings](08-findings.md), "Setup in the browser").
+In testing, the pipe user had grants on L0 and its error table only, and L1 and the aggregate tables filled with no loss ([Findings](09-findings.md), "Setup in the browser").
 
 The state becomes Running in a few minutes.
 The pipe creates its managed subscription (`clickpipes-<pipe id>`; 7-day retention, 60 s ack deadline, ordering on).
@@ -246,7 +246,7 @@ SELECT
 ```
 
 The L0 row count roughly equals L1 plus the noise counts (minus a few seconds still on their way to L1).
-For the periodic checks, paste the queries of `verify/checks.sql` into the SQL console ("Daily checks" in [Operations](06-operations.md)).
+For the periodic checks, paste the queries of `verify/checks.sql` into the SQL console ("Daily checks" in [Operations](07-operations.md)).
 
 ## Removal
 

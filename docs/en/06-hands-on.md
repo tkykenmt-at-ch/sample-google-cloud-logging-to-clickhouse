@@ -1,14 +1,14 @@
 # Hands-on
 
-English | [日本語](../ja/05-hands-on.md)
+English | [日本語](../ja/06-hands-on.md)
 
 Each part ends by removing what it created.
 
 - **Part 1 (local, about 10 minutes)**: run the SQL from L0 through L1, L2, and L3 on `clickhouse local` alone, and check Japanese search and the noise rule. No cloud resources are created.
 - **Part 2 (real services, about 60 minutes)**: deploy to a sandbox Google Cloud project and ClickHouse Cloud service with Terraform, publish synthetic logs, and search them in ClickStack.
-- **Part 3 (real services, about 30 minutes)**: build what Terraform created in part 2 one piece at a time with `gcloud` and `clickhousectl`, and see what each does. This is not a deployment procedure; deploy with Terraform as in [Setup](03-setup.md).
+- **Part 3 (real services, about 30 minutes)**: build what Terraform created in part 2 one piece at a time with `gcloud` and `clickhousectl`, and see what each does. This is not a deployment procedure; deploy with Terraform as in [Setup](04-setup.md).
 
-Background is in [Design](01-design.md); production deployment is in [Setup](03-setup.md).
+Background is in [Design](01-design.md); production deployment is in [Setup](04-setup.md).
 
 ## Part 1: run the SQL locally
 
@@ -111,7 +111,7 @@ In a production project, every log of the project would be sent to the topic and
 ### 2-1. Prerequisites
 
 - A sandbox Google Cloud project and a ClickHouse Cloud service (26.6 or later)
-- "Prerequisites" and "1. Authenticate" in [Setup](03-setup.md)
+- "Prerequisites" and "1. Authenticate" in [Setup](04-setup.md)
 - `clickhouse` from part 1 (used by `verify/completeness.sh`)
 - Publish permission on the topic (`roles/pubsub.publisher`; project owners and editors have it) for the account that publishes the synthetic logs. `loadgen/gen_logentry.py` uses the token from `gcloud auth application-default print-access-token` (the ADC from "1. Authenticate")
 
@@ -156,7 +156,7 @@ Redeliveries happen (0 to 3% in testing); a non-zero value is not data loss.
 
 ### 2-5. Search in ClickStack
 
-Create the source and dashboard as in "4. Create the ClickStack source (optional)" of [Setup](03-setup.md), then open ClickStack.
+Create the source and dashboard as in "4. Create the ClickStack source (optional)" of [Setup](04-setup.md), then open ClickStack.
 
 1. Select the "Cloud Logging" source and type `タイムアウト` in the search box. Logs whose body contains the word appear.
 2. Filter ServiceName to `web-frontend` on the left.
@@ -187,7 +187,7 @@ python3 tools/chq.py -q "SELECT
 
 Pub/Sub redeliveries can put rows with the same `MessageId` into L1, so compare distinct `MessageId`s, not row counts.
 
-Details and how to rework an L2 are under "Creating and reworking an L2" in [Operations](06-operations.md).
+Details and how to rework an L2 are under "Creating and reworking an L2" in [Operations](07-operations.md).
 
 ### 2-7. Add an L3
 
@@ -203,7 +203,7 @@ python3 tools/chq.py --var L3=logs_by_logid_1m_v1 --var T="$T" --var CHECK_TO="$
 ```
 
 The last two numbers (the L3 total and the L1 row count) match.
-The procedure is under "Adding an L3" in [Operations](06-operations.md).
+The procedure is under "Adding an L3" in [Operations](07-operations.md).
 
 ### 2-8. Clean up
 
@@ -221,11 +221,11 @@ Clean up here before part 3 as well (part 3 uses the same database `gcl`).
 
 ## Part 3: build it one piece at a time with gcloud and clickhousectl
 
-This part authenticates with a key file, because `clickhousectl` 0.4.2 cannot create workload identity pipes ("Switching from a key to workload identity" in [Operations](06-operations.md)).
+This part authenticates with a key file, because `clickhousectl` 0.4.2 cannot create workload identity pipes ("Switching from a key to workload identity" in [Operations](07-operations.md)).
 
 Build what Terraform created in part 2 with commands, one resource at a time.
 Each step says what it creates and why.
-Deploy with Terraform as in [Setup](03-setup.md), not with these commands.
+Deploy with Terraform as in [Setup](04-setup.md), not with these commands.
 Terraform tracks what it created in its state, so removal deletes only that.
 
 Resource names carry `handson` so they do not collide with part 2 or with existing resources.
@@ -324,7 +324,7 @@ If creation fails for missing permissions, wait a minute or two for IAM to propa
 ### 3-7. ClickStack source
 
 Under Team Settings > Sources in ClickStack, create a log source.
-The fields and values on the page are in "8. Create the ClickStack source" of [Setup in the browser](04-setup-console.md).
+The fields and values on the page are in "8. Create the ClickStack source" of [Setup in the browser](05-setup-console.md).
 The JSON below is the same configuration in API field names (the same values as `terraform/clickstack.tf`).
 The dashboard is created by Terraform only (`terraform/clickstack/dashboard.json.tftpl`).
 

@@ -57,6 +57,7 @@ plugins:
             Home: ホーム
             Design: 設計
             Planning: 計画
+            Estimating cost: 費用の見積もり
             Setup: 導入
             Setup in the browser: ブラウザで導入する
             Hands-on: ハンズオン
@@ -68,12 +69,13 @@ nav:
   - Home: index.md
   - Design: 01-design.md
   - Planning: 02-planning.md
-  - Setup: 03-setup.md
-  - Setup in the browser: 04-setup-console.md
-  - Hands-on: 05-hands-on.md
-  - Operations: 06-operations.md
-  - Troubleshooting: 07-troubleshooting.md
-  - Findings: 08-findings.md
+  - Estimating cost: 03-cost.md
+  - Setup: 04-setup.md
+  - Setup in the browser: 05-setup-console.md
+  - Hands-on: 06-hands-on.md
+  - Operations: 07-operations.md
+  - Troubleshooting: 08-troubleshooting.md
+  - Findings: 09-findings.md
 
 markdown_extensions:
   - admonition

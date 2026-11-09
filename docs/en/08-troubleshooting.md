@@ -1,8 +1,8 @@
 # Troubleshooting
 
-English | [日本語](../ja/07-troubleshooting.md)
+English | [日本語](../ja/08-troubleshooting.md)
 
-How to narrow down an ingest problem from the symptom to its cause and fix. Queries are referred to by their number in `verify/checks.sql` (run with `python3 tools/chq.py verify/checks.sql`). The routine checks and their thresholds are in "Daily checks" in [operations](06-operations.md).
+How to narrow down an ingest problem from the symptom to its cause and fix. Queries are referred to by their number in `verify/checks.sql` (run with `python3 tools/chq.py verify/checks.sql`). The routine checks and their thresholds are in "Daily checks" in [operations](07-operations.md).
 
 | Symptom | Section |
 |---|---|
@@ -10,7 +10,7 @@ How to narrow down an ingest problem from the symptom to its cause and fix. Quer
 | The pipe goes Degraded or Failed; rows do not reach L1 | "Detecting and recovering MV failures" |
 | Inserts fail with `TOO_MANY_PARTITIONS` | "One insert spans too many partitions" |
 | The part count looks too high | "Part counts" |
-| The sink's export count and the rows in ClickHouse disagree | Loss on the path, in "Daily checks" in [operations](06-operations.md) |
+| The sink's export count and the rows in ClickHouse disagree | Loss on the path, in "Daily checks" in [operations](07-operations.md) |
 
 ## Ingest falls behind
 ### 1. Measure the delay
@@ -49,7 +49,7 @@ The pipe closes a batch and inserts it at 100,000 rows, at 32 MB per GB of repli
 Choose the replica size and number from the ingest rate ("Estimating size" in [planning](02-planning.md)) and change them. Run two or more replicas.
 
 - In the browser: open the pipe in the ClickHouse Cloud Console, Settings → Advanced Settings → Scaling
-- Terraform: `pipe_replicas`, `pipe_replica_cpu_millicores`, `pipe_replica_memory_gb` ("Changing settings after creation" in [setup](03-setup.md))
+- Terraform: `pipe_replicas`, `pipe_replica_cpu_millicores`, `pipe_replica_memory_gb` ("Changing settings after creation" in [setup](04-setup.md))
 
 With rate F, total throughput C and a delay of T, catching up takes T × F ÷ (C − F).
 
@@ -64,7 +64,7 @@ With rate F, total throughput C and a delay of T, catching up takes T × F ÷ (C
 - Both Pub/Sub metrics fall and level off.
 ### When the backlog lasted long
 
-- The managed subscription keeps messages 7 days ([docs](https://clickhouse.com/docs/integrations/clickpipes/pubsub/overview)). Messages not processed within 7 days are discarded, and without topic retention they cannot be recovered from Pub/Sub. If they are still in a Cloud Logging log bucket, load them with "Backfilling existing logs" in [operations](06-operations.md).
+- The managed subscription keeps messages 7 days ([docs](https://clickhouse.com/docs/integrations/clickpipes/pubsub/overview)). Messages not processed within 7 days are discarded, and without topic retention they cannot be recovered from Pub/Sub. If they are still in a Cloud Logging log bucket, load them with "Backfilling existing logs" in [operations](07-operations.md).
 - Unprocessed messages older than one day incur storage charges ([storage costs](https://cloud.google.com/pubsub/pricing#storage_costs)).
 
 ## Detecting and recovering MV failures
@@ -81,7 +81,7 @@ This comes from the default value 1 of the setting `deduplicate_blocks_in_depend
 
 In testing, however, the pipe went Failed and stopped ingesting about 60 minutes after the first failure.
 Fixing the MV and restarting with `clickpipe start` lost nothing, but part of the stuck batch was written to L1 twice.
-After a restart, check `MessageId` duplicates with check 3 in `verify/checks.sql`, and deduplicate in queries or rebuild the range with appendix A2 in [operations](06-operations.md).
+After a restart, check `MessageId` duplicates with check 3 in `verify/checks.sql`, and deduplicate in queries or rebuild the range with appendix A2 in [operations](07-operations.md).
 
 The pipe state does not show a stuck batch until Failed, so monitor the L0 to L1 gap and failed inserts in `system.query_log`.
 The SQL is in `sql/runbooks/05_mv_failure.sql`.

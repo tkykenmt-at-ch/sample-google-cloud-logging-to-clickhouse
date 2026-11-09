@@ -1,13 +1,13 @@
 # 運用
 
-[English](../en/06-operations.md) | 日本語
+[English](../en/07-operations.md) | 日本語
 
 日常の運用で行う変更は、主にノイズの除外条件の追加、L2 の新規作成と作り替え、L3 の追加です。
 L1 は LogEntry の共通項目を列に、個別の内容を属性に保存するため、ログの種類が増えても L0 と L1 を作り直すことはほとんどありません。
 L0 と L1 の作り直しと切り替えは、復旧や構成の見直しのときだけ使うので、付録に分けています。
 
 各手順の SQL ひな型は `sql/runbooks/` にあります。
-数値と条件は [検証記録](08-findings.md) にあります。
+数値と条件は [検証記録](09-findings.md) にあります。
 
 ## 日常の確認
 
@@ -17,12 +17,12 @@ L0 と L1 の作り直しと切り替えは、復旧や構成の見直しのと�
 | 確認項目 | `verify/checks.sql` | 異常の目安 | 対処 |
 |---|---|---|---|
 | 経路全体の欠損 | 9 番と Cloud Monitoring の `logging.googleapis.com/exports/log_entry_count` | シンクの送出件数との差が 1% を超える（平常時は 0.1% 未満） | パイプの状態、Pub/Sub の滞留、シンクの送出エラーを確かめる |
-| 処理が停滞したバッチ | 2 番 | 0 より大きい | [トラブルシューティング](07-troubleshooting.md) の「MV のエラーの検知と復旧」 |
-| 失敗した INSERT | 6 番 | 1 件以上 | [トラブルシューティング](07-troubleshooting.md) の「MV のエラーの検知と復旧」 |
+| 処理が停滞したバッチ | 2 番 | 0 より大きい | [トラブルシューティング](08-troubleshooting.md) の「MV のエラーの検知と復旧」 |
+| 失敗した INSERT | 6 番 | 1 件以上 | [トラブルシューティング](08-troubleshooting.md) の「MV のエラーの検知と復旧」 |
 | 取り込めなかったメッセージ | 10 番（ClickPipes のエラーテーブル `gcl_landing_v1_clickpipes_error`、保持 7 日） | 1 件以上（L0 には仮想列だけを入れるので、平常時は 0 件） | `error_msg` で原因を確かめる。メッセージ全体が `record_value` に残り、環境（プロジェクト）は `logName` から分かる |
-| 取り込みの遅れ | 1 番 | p99 が 10 秒を超えて増え続ける | [トラブルシューティング](07-troubleshooting.md) の「取り込みが遅れる」 |
+| 取り込みの遅れ | 1 番 | p99 が 10 秒を超えて増え続ける | [トラブルシューティング](08-troubleshooting.md) の「取り込みが遅れる」 |
 | 重複 | 3 番 | 障害や一時停止の後に増えた | 検索側で除くか、付録 A2 で該当日を作り直す |
-| パイプの状態 | `clickhousectl cloud clickpipe get <service id> <pipe id>`（パイプの ID は `terraform output clickpipe_id`） | Failed | [トラブルシューティング](07-troubleshooting.md) の「MV のエラーの検知と復旧」 |
+| パイプの状態 | `clickhousectl cloud clickpipe get <service id> <pipe id>`（パイプの ID は `terraform output clickpipe_id`） | Failed | [トラブルシューティング](08-troubleshooting.md) の「MV のエラーの検知と復旧」 |
 
 ```bash
 export CH_SERVICE_ID=<service id>
@@ -44,7 +44,7 @@ ClickPipes の通知（メール、コンソール、Slack）は、パイプの�
 | 大量に発生し、個別に確認する必要性が低いログを外す | ノイズの除去と、ログの種類に依存しない整形 | `sql/runbooks/07_add_noise_rule.sql` | 不要 |
 | L1 で満たせない要件のあるログを型付きの列にする。既存の L2 を作り替える | L2 の新規作成と作り替え | `sql/runbooks/08_add_or_rework_l2.sql`、例 `sql/examples/` | 不要 |
 | 長い期間の推移を速く見る。集計だけ長く残す | L3 の追加 | `sql/runbooks/09_add_l3.sql`、`09_add_l3_backfill.sql` | 不要 |
-| MV が例外を出している。パイプが Failed になった | [トラブルシューティング](07-troubleshooting.md) の「MV のエラーの検知と復旧」 | `sql/runbooks/05_mv_failure.sql` | ― |
+| MV が例外を出している。パイプが Failed になった | [トラブルシューティング](08-troubleshooting.md) の「MV のエラーの検知と復旧」 | `sql/runbooks/05_mv_failure.sql` | ― |
 | 取り出す列を増やす | 付録 A1 | `sql/runbooks/01_add_column.sql` | 不要 |
 | 解析の誤りを直し、過去日も直す | 付録 A2 | `sql/runbooks/02_rebuild_partition.sql` | 不要 |
 | 型、ORDER BY、パーティション、エンジンを変える | 付録 A3 | `sql/runbooks/03_blue_green.sql` | 不要 |
@@ -83,7 +83,7 @@ T より前と T 以降を新旧の MV で分担するので、境界では取�
 - MV で外しても、Pub/Sub と ClickPipes の転送量は減りません。
   量が多く ClickHouse で検索しないログは、シンクのフィルタで除外することもできます（Cloud Logging 側にも残る `_Required` 行きのログなど）。
   その場合は件数も残りません。
-  検証環境の Lease 更新は、Pub/Sub に送った量の 59% でしたが、金額に換算すると GKE クラスタ 1 つあたり月に約 $3 でした（[検証記録](08-findings.md) の「Pub/Sub の課金対象量」）。
+  検証環境の Lease 更新は、Pub/Sub に送った量の 59% でしたが、金額に換算すると GKE クラスタ 1 つあたり月に約 $3 でした（[検証記録](09-findings.md) の「Pub/Sub の課金対象量」）。
 
 除外条件の切り替えには、ほかの手順と同じく `_publish_time` の境界 T を使います。
 集計の MV は `_publish_time >= T` の行だけを数え、MV1 は `_publish_time >= T` の行だけを外します。
@@ -175,7 +175,7 @@ ClickPipes がサービスごとに管理する Google のサービスアカウ�
 サービスアカウントと鍵は作られず、権限を付ける相手は `terraform output clickpipes_service_account` で確かめられます。
 
 **動いているパイプを切り替える場合**は、パイプを作り直さずに認証方式だけを変えられます。
-検証では、同じパイプと同じ管理サブスクリプションのまま Running が続き、取り込みは途切れませんでした（[検証記録](08-findings.md) の「Workload Identity」）。
+検証では、同じパイプと同じ管理サブスクリプションのまま Running が続き、取り込みは途切れませんでした（[検証記録](09-findings.md) の「Workload Identity」）。
 
 **Terraform で管理している場合**は、`terraform.tfvars` に `clickpipes_auth = "workload_identity"` を書いて適用するだけです（ClickHouse の Terraform プロバイダ v3.37.0 以降）。
 適用の順序は、Workload Identity 用のロールの付与、パイプの更新、古い鍵とロールの付与とサービスアカウントの削除です。
@@ -186,7 +186,7 @@ ClickPipes がサービスごとに管理する Google のサービスアカウ�
 - 2026-10-08 より前のこのリポジトリで作った環境は、state に `create_before_destroy` が入っていません。
   その場合は古い鍵とロールの付与が先に消え、パイプが更新されるまで約 20 秒の間が空きます。
   検証では、パイプは Running のまま更新を迎え、Provisioning を経て Running に戻りました。
-  その間のメッセージは管理サブスクリプションに残り、欠損はありませんでした（[検証記録](08-findings.md) の「Workload Identity」）。
+  その間のメッセージは管理サブスクリプションに残り、欠損はありませんでした（[検証記録](09-findings.md) の「Workload Identity」）。
 
 **Terraform を使わない場合**は、API で認証方式だけを変えます。
 
@@ -258,7 +258,7 @@ gcloud logging copy _Default storage.googleapis.com/<bucket> --location=global \
 gcloud logging operations describe <operation id> --location=global --project=<project>   # state, logEntriesCopiedCount
 ```
 
-検証の結果（[検証記録](08-findings.md) の「既存ログのバックフィル」）：
+検証の結果（[検証記録](09-findings.md) の「既存ログのバックフィル」）：
 
 - 書き出したファイルは、シンクが送るのと同じ LogEntry の JSON が 1 行に 1 件ずつ並んだ形だった。
   MV1 の解析をそのまま使える。

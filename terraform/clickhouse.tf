@@ -1,7 +1,7 @@
 # Tables and materialized views (L0, L1, MV1, L3 rollup, noise counts) from sql/.
 # The ClickHouse provider has no resource for DDL, so tools/chq.py runs the files through the Cloud Query API.
 # Every statement is CREATE ... IF NOT EXISTS, so re-running is safe, and it also means a changed TTL or
-# definer does not reach existing tables: change those with ALTER TABLE (docs/en/06-operations.md).
+# definer does not reach existing tables: change those with ALTER TABLE (docs/en/07-operations.md).
 # The variables passed on the command line are restricted by their validation rules (variables.tf).
 resource "terraform_data" "schema" {
   count = var.apply_schema ? 1 : 0

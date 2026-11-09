@@ -8,9 +8,9 @@ The configuration is one example; adjust it to your log types, volumes, and rete
 > The behavior described here was observed on ClickHouse Cloud 26.6 with Pub/Sub ClickPipes (Private Preview).
 > Private Preview features may change in behavior and pricing before general availability (GA).
 > "(verified)" marks behavior observed on real services, "(docs)" marks statements from official documentation (the link is the source), and "(PoC)" marks items to confirm in your own environment.
-> Test conditions and numbers are in the [findings](08-findings.md).
+> Test conditions and numbers are in the [findings](09-findings.md).
 
-Decisions for your environment and size and cost estimates are in [Planning](02-planning.md), deployment is in [Setup](03-setup.md), a guided run is in the [Hands-on](05-hands-on.md), and procedures are in [Operations](06-operations.md).
+Decisions for your environment and size estimates are in [Planning](02-planning.md), cost estimates are in [Estimating cost](03-cost.md), deployment is in [Setup](04-setup.md), a guided run is in the [Hands-on](06-hands-on.md), and procedures are in [Operations](07-operations.md).
 
 ## Key points
 
@@ -18,7 +18,7 @@ Decisions for your environment and size and cost estimates are in [Planning](02-
 - **Usage**: every kind of log lands in L1, so search, value extraction, and dashboards start in L1. Typed tables per log kind (L2) and aggregate tables (L3) are added only when L1 cannot meet a requirement.
 - **When Cloud Logging costs go down**: sending logs to Pub/Sub does not by itself reduce Cloud Logging costs. Costs drop when you stop storing logs in the `_Default` bucket. Before that, list the features that depend on the logs in `_Default`.
 - **Size**: derive the ingest rate from the billable Cloud Logging volume, and size the ClickPipes replicas and the service with the official guidelines. The ClickPipes default (one replica of the smallest size) is meant for trials and may not keep up with production volume.
-- **New costs**: Pub/Sub throughput, ClickPipes, and ClickHouse Cloud. Pub/Sub charges also apply to logs that Cloud Logging does not bill, so measure while running both paths in parallel.
+- **New costs**: Pub/Sub throughput, ClickPipes, and ClickHouse Cloud. Pub/Sub charges also apply to logs that Cloud Logging does not bill, so measure while running both paths in parallel ([Estimating cost](03-cost.md)).
 - **Japanese search**: with a 2-character n-gram full-text index on the body, ClickStack can search Japanese words.
 - **Decisions for your environment**: target projects, retention per log kind, who can see what, and what to do with past logs ([Planning](02-planning.md)).
 
@@ -130,7 +130,7 @@ GROUP BY ProjectId, Region
 ORDER BY rows DESC;
 ```
 
-If you filter or aggregate by region often, put this expression into a derived column of your L1 (appendix A1 of [Operations](06-operations.md)) or into an L2.
+If you filter or aggregate by region often, put this expression into a derived column of your L1 (appendix A1 of [Operations](07-operations.md)) or into an L2.
 
 ## When to build an L2
 
@@ -150,7 +150,7 @@ Otherwise, search L1 and extract values into tables and charts.
 - Do not build an L2 for one-off investigations, low-volume logs, or logs whose payload shape is not stable.
 - Add an L3 when long-range trend charts must be fast or when aggregates must be kept longer than rows.
 
-How to build L2 and L3 is in [Operations](06-operations.md).
+How to build L2 and L3 is in [Operations](07-operations.md).
 
 ## Design details
 

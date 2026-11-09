@@ -114,7 +114,7 @@ variable "clickhouse_service_id" {
 }
 
 variable "landing_ttl_days" {
-  description = "L0 retention. Size it from: ingest delay + switch/backfill time + verification/rollback time. Used only when the tables are created; change it later with ALTER TABLE ... MODIFY TTL (docs/en/06-operations.md)."
+  description = "L0 retention. Size it from: ingest delay + switch/backfill time + verification/rollback time. Used only when the tables are created; change it later with ALTER TABLE ... MODIFY TTL (docs/en/07-operations.md)."
   type        = number
   default     = 7
 

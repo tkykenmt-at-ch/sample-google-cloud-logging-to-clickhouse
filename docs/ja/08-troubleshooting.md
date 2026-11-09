@@ -1,10 +1,10 @@
 # トラブルシューティング
 
-[English](../en/07-troubleshooting.md) | 日本語
+[English](../en/08-troubleshooting.md) | 日本語
 
 取り込みの不調を、症状から原因と対処まで切り分ける手順です。
 クエリは `verify/checks.sql` の番号で示します（実行は `python3 tools/chq.py verify/checks.sql`）。
-日常の確認の項目と目安、遅れの監視は [運用](06-operations.md) の「日常の確認」と「監視とアラート」にあります。
+日常の確認の項目と目安、遅れの監視は [運用](07-operations.md) の「日常の確認」と「監視とアラート」にあります。
 
 | 症状 | 見る節 |
 |---|---|
@@ -12,7 +12,7 @@
 | パイプが Degraded や Failed になる、L1 に届かない行がある | 「MV のエラーの検知と復旧」 |
 | INSERT が `TOO_MANY_PARTITIONS` で失敗する | 「1 回の INSERT がまたぐパーティションが多すぎる」 |
 | パーツが多すぎるように見える | 「パーツの数」 |
-| シンクの送出件数と ClickHouse の行数が合わない | [運用](06-operations.md) の「日常の確認」の経路全体の欠損 |
+| シンクの送出件数と ClickHouse の行数が合わない | [運用](07-operations.md) の「日常の確認」の経路全体の欠損 |
 
 ## 取り込みが遅れる
 ### 1. 遅れを測る
@@ -60,7 +60,7 @@ L0 は公開日でパーティションを分けているので、追いつい�
 レプリカは 2 つ以上にします。
 
 - ブラウザ：ClickHouse Cloud Console でパイプを開き、Settings → Advanced Settings → Scaling
-- Terraform：`pipe_replicas`、`pipe_replica_cpu_millicores`、`pipe_replica_memory_gb`（[導入](03-setup.md) の「作成後に設定を変える」）
+- Terraform：`pipe_replicas`、`pipe_replica_cpu_millicores`、`pipe_replica_memory_gb`（[導入](04-setup.md) の「作成後に設定を変える」）
 
 追いつくまでの時間は、流量 F、合計の処理量 C、遅れ T のとき T × F ÷ (C − F) です。
 
@@ -78,7 +78,7 @@ L0 は公開日でパーティションを分けているので、追いつい�
 
 - 管理サブスクリプションの保持は 7 日です（[公式資料](https://clickhouse.com/docs/integrations/clickpipes/pubsub/overview)）。
   7 日を過ぎても処理されないメッセージは破棄され、トピックに保持がなければ Pub/Sub からは取り戻せません。
-  Cloud Logging のログバケットに残っていれば、[運用](06-operations.md) の「既存ログのバックフィル」の手順で入れられます。
+  Cloud Logging のログバケットに残っていれば、[運用](07-operations.md) の「既存ログのバックフィル」の手順で入れられます。
 - 公開から 1 日を超えた未処理のメッセージには、保管料がかかります（[保管料](https://cloud.google.com/pubsub/pricing#storage_costs)）。
 
 ## MV のエラーの検知と復旧
@@ -96,7 +96,7 @@ MV が例外を出したときの挙動は、次のとおりでした。
 
 ただし検証では、最初の失敗から約 60 分たつと、パイプは Failed になって取り込みを止めました。
 その場合も、MV を直してから `clickpipe start` で再開すれば欠損は出ませんでしたが、処理が停滞したバッチの一部が L1 に二重に入りました。
-再開後は `verify/checks.sql` の 3 番で `MessageId` の重複を確かめ、検索側で除くか、該当範囲を [運用](06-operations.md) の付録 A2 で作り直します。
+再開後は `verify/checks.sql` の 3 番で `MessageId` の重複を確かめ、検索側で除くか、該当範囲を [運用](07-operations.md) の付録 A2 で作り直します。
 
 パイプの状態表示は、Failed になるまで処理の停滞を示さないので、監視は L0 と L1 の差と、`system.query_log` の失敗した INSERT で行います。
 SQL は `sql/runbooks/05_mv_failure.sql` にあります。

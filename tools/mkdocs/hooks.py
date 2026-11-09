@@ -4,6 +4,7 @@
 - The "English | 日本語" line at the top of each page is dropped; the site has its own language switcher.
 - GitHub alerts (> [!NOTE]) become admonitions.
 - In Japanese pages, the line break between two sentences is dropped (it would render as a space).
+- Links to the CSV templates under docs/files get the download attribute.
 """
 
 import re
@@ -13,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[2]
 REPO = "https://github.com/tkykenmt-at-ch/sample-google-cloud-logging-to-clickhouse"
 READMES = {"en/index.md": "README.md", "ja/index.md": "README.ja.md"}
 
-# English | [日本語](../ja/03-setup.md), [English](../en/03-setup.md) | 日本語, and the README forms with "·".
+# English | [日本語](../ja/04-setup.md), [English](../en/04-setup.md) | 日本語, and the README forms with "·".
 LANG_LINE = re.compile(r"^(English [|·] \[日本語\]\([^)]*\)|\[English\]\([^)]*\) [|·] 日本語)\n+", re.M)
 ALERT = re.compile(r"^> \[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]\n((?:>.*\n?)+)", re.M)
 ALERT_KIND = {"NOTE": "note", "TIP": "tip", "IMPORTANT": "info", "WARNING": "warning", "CAUTION": "danger"}
@@ -64,7 +65,11 @@ PRE = re.compile(r"(<pre.*?</pre>)", re.S)
 JA_BREAK = re.compile(r"(?<=[。！？）」])\n(?=\S)")
 
 
+CSV_LINK = re.compile(r'(<a href="[^"]+\.csv")')
+
+
 def on_page_content(html, page, config, files, **kwargs):
+    html = CSV_LINK.sub(r"\1 download", html)
     if not page.file.src_uri.startswith("ja/"):
         return html
     parts = PRE.split(html)

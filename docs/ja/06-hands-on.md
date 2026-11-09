@@ -1,6 +1,6 @@
 # ハンズオン
 
-[English](../en/05-hands-on.md) | 日本語
+[English](../en/06-hands-on.md) | 日本語
 
 どの部も、最後に作ったものを削除して終わります。
 
@@ -9,9 +9,9 @@
 - **第 2 部（実環境、約 60 分）**：検証用の Google Cloud プロジェクトと ClickHouse Cloud のサービスに Terraform で環境を構築し、合成ログを送信して ClickStack で検索します。
 - **第 3 部（実環境、約 30 分）**：第 2 部で Terraform が作ったものを、`gcloud` と `clickhousectl` で 1 つずつ作り、それぞれの役割を確かめます。
   導入の手順ではありません。
-  導入には [導入](03-setup.md) の Terraform を使います。
+  導入には [導入](04-setup.md) の Terraform を使います。
 
-設計の背景は [設計](01-design.md)、本番向けの導入手順は [導入](03-setup.md) にあります。
+設計の背景は [設計](01-design.md)、本番向けの導入手順は [導入](04-setup.md) にあります。
 
 ## 第 1 部：ローカル環境で SQL を実行する
 
@@ -118,7 +118,7 @@ q "SELECT Rule, Principal, sum(Cnt) FROM gcl.gcl_noise_1m_v1 GROUP BY ALL ORDER 
 ### 2-1. 準備
 
 - 検証用の Google Cloud プロジェクトと、ClickHouse Cloud のサービス（26.6 以降）
-- [導入](03-setup.md) の「前提」と「1. 認証」
+- [導入](04-setup.md) の「前提」と「1. 認証」
 - 第 1 部の `clickhouse`（`verify/completeness.sh` が使う）
 - 合成ログを公開するアカウントに、トピックへの公開権限（`roles/pubsub.publisher`。プロジェクトのオーナーや編集者なら付いている）。
   `loadgen/gen_logentry.py` は `gcloud auth application-default print-access-token` のトークン（導入の「1. 認証」の ADC）を使います。
@@ -164,7 +164,7 @@ Lease の更新を混ぜずに確かめるときは、`--lease-rate` を指定�
 
 ### 2-5. ClickStack で検索する
 
-[導入](03-setup.md) の「4. ClickStack のソースを作る（任意）」でソースとダッシュボードを作り、ClickStack を開きます。
+[導入](04-setup.md) の「4. ClickStack のソースを作る（任意）」でソースとダッシュボードを作り、ClickStack を開きます。
 
 1. ソース「Cloud Logging」を選び、検索窓に `タイムアウト` と入れる。
    本文にその語を含むログが出る。
@@ -197,7 +197,7 @@ python3 tools/chq.py -q "SELECT
 
 Pub/Sub の再配信で L1 に同じ `MessageId` の行が入ることがあるので、行数ではなく `MessageId` の種類の数で比べます。
 
-手順の詳細と作り替えの方法は [運用](06-operations.md) の「L2 の新規作成と作り替え」にあります。
+手順の詳細と作り替えの方法は [運用](07-operations.md) の「L2 の新規作成と作り替え」にあります。
 
 ### 2-7. L3 を追加する
 
@@ -213,7 +213,7 @@ python3 tools/chq.py --var L3=logs_by_logid_1m_v1 --var T="$T" --var CHECK_TO="$
 ```
 
 最後に表示される 2 つの値（L3 の合計と L1 の行数）が一致します。
-手順は [運用](06-operations.md) の「L3 の追加」にあります。
+手順は [運用](07-operations.md) の「L3 の追加」にあります。
 
 ### 2-8. リソースを削除する
 
@@ -232,11 +232,11 @@ rm -f sent_ids.txt
 ## 第 3 部：gcloud と clickhousectl で 1 つずつ作る
 
 この部では鍵ファイルで認証します。
-`clickhousectl` 0.4.2 は Workload Identity のパイプを作れないためです（[運用](06-operations.md) の「鍵から Workload Identity へ切り替える」）。
+`clickhousectl` 0.4.2 は Workload Identity のパイプを作れないためです（[運用](07-operations.md) の「鍵から Workload Identity へ切り替える」）。
 
 第 2 部で Terraform が作ったものを、コマンドで 1 つずつ作ります。
 各手順で、何をなぜ作るのかを確かめます。
-導入には、このコマンドではなく [導入](03-setup.md) の Terraform を使います。
+導入には、このコマンドではなく [導入](04-setup.md) の Terraform を使います。
 Terraform は作ったものを state で管理するので、削除のときに作ったものだけを消せます。
 
 リソースの名前には `handson` を付け、第 2 部や既存のリソースと重ならないようにします。
@@ -337,7 +337,7 @@ clickhousectl cloud clickpipe get "$CH_SERVICE_ID" $PIPE_ID   # state が Runnin
 ### 3-7. ClickStack のソース
 
 ClickStack の Team Settings の Sources で、ログソースを作ります。
-画面の項目と入れる値は、[ブラウザで導入する](04-setup-console.md) の「8. ClickStack のソースを作る」にあります。
+画面の項目と入れる値は、[ブラウザで導入する](05-setup-console.md) の「8. ClickStack のソースを作る」にあります。
 次の JSON は、同じ設定を API の項目名で表したものです（`terraform/clickstack.tf` と同じ値）。
 ダッシュボードは Terraform でだけ作ります（`terraform/clickstack/dashboard.json.tftpl`）。
 

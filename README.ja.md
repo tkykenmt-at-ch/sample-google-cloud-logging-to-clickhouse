@@ -8,7 +8,7 @@
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 [![ClickHouse Cloud](https://img.shields.io/badge/ClickHouse_Cloud-26.6%2B-FAFF69?logo=clickhouse&logoColor=black)](https://clickhouse.com/cloud)
 [![Terraform](https://img.shields.io/badge/Terraform-%E2%89%A5_1.9-7B42BC?logo=terraform&logoColor=white)](terraform/)
-[![Pub/Sub ClickPipes](https://img.shields.io/badge/Pub%2FSub_ClickPipes-Private_Preview-orange)](docs/ja/08-findings.md)
+[![Pub/Sub ClickPipes](https://img.shields.io/badge/Pub%2FSub_ClickPipes-Private_Preview-orange)](docs/ja/09-findings.md)
 
 [English](README.md) · 日本語
 
@@ -18,8 +18,8 @@
 
 > [!NOTE]
 > Pub/Sub ClickPipes は検証時点（2026-10）で Private Preview で、挙動は今後変わる可能性があります。
-> 主な挙動は実機で確認しています。検証日、バージョン、条件、測定値、未検証の項目は [検証記録](docs/ja/08-findings.md) にあります。
-> 採用前に [ハンズオン](docs/ja/05-hands-on.md) で同じ確認を利用者の環境で行ってください。
+> 主な挙動は実機で確認しています。検証日、バージョン、条件、測定値、未検証の項目は [検証記録](docs/ja/09-findings.md) にあります。
+> 採用前に [ハンズオン](docs/ja/06-hands-on.md) で同じ確認を利用者の環境で行ってください。
 
 ## 特長
 
@@ -65,12 +65,12 @@ verify/local_e2e.sh 20000
 
 L0、L1、L2、L3、ノイズの集計テーブルの件数を照合し、日本語の全文検索の確認結果とともに表で表示します。
 
-実環境に構築する場合は、[導入](docs/ja/03-setup.md) の手順で Terraform を使います。
-gcloud と clickhousectl で 1 つずつ作りながら仕組みを確かめる手順は、[ハンズオン](docs/ja/05-hands-on.md) の第 3 部にあります。
+実環境に構築する場合は、[導入](docs/ja/04-setup.md) の手順で Terraform を使います。
+gcloud と clickhousectl で 1 つずつ作りながら仕組みを確かめる手順は、[ハンズオン](docs/ja/06-hands-on.md) の第 3 部にあります。
 
 > [!WARNING]
 > `terraform apply` を実行した時点から、シンクはプロジェクトの全ログを Pub/Sub へ送り、Pub/Sub の料金がかかります。
-> 先に [導入](docs/ja/03-setup.md) の「始める前に」を読み、まず検証用のプロジェクトで試してください。
+> 先に [導入](docs/ja/04-setup.md) の「始める前に」を読み、まず検証用のプロジェクトで試してください。
 
 ## ドキュメント
 
@@ -79,13 +79,14 @@ gcloud と clickhousectl で 1 つずつ作りながら仕組みを確かめる�
 | ドキュメント | 内容 |
 |---|---|
 | [設計](docs/ja/01-design.md) | 要点、層の役割、L2 を作る判断、設計の詳細 |
-| [計画](docs/ja/02-planning.md) | 利用者の環境で決めること、大きさの見積もり方、費用の見積もり方、PoC の実測から月額を出す方法 |
-| [導入](docs/ja/03-setup.md) | 始める前の注意、Terraform での構築、作成後の設定の変更、削除 |
-| [ブラウザで導入する](docs/ja/04-setup-console.md) | Terraform を使えない環境向けに、同じ構成を Google Cloud と ClickHouse Cloud の画面だけで作る（画面の画像つき） |
-| [ハンズオン](docs/ja/05-hands-on.md) | ローカルの `clickhouse local` だけで SQL を動かす第 1 部、Terraform で実環境に構築して ClickStack で検索する第 2 部、同じものを gcloud と clickhousectl で 1 つずつ作る第 3 部 |
-| [運用](docs/ja/06-operations.md) | 日常の確認、監視とアラート、ノイズの除去、L2 と L3、避ける操作、保持期間の変更、本番ログへの切り替え、L0・L1 の作り直し（付録） |
-| [トラブルシューティング](docs/ja/07-troubleshooting.md) | 取り込みの遅れ、MV のエラー、1 回の INSERT がまたぐパーティション、パーツの数を、症状から切り分ける手順 |
-| [検証記録](docs/ja/08-findings.md) | 実機で確かめた挙動と数値 |
+| [計画](docs/ja/02-planning.md) | 利用者の環境で決めること、ClickPipes とサービスの大きさの見積もり方 |
+| [費用の見積もり](docs/ja/03-cost.md) | PoC の前の概算、PoC の実測から月額を出す方法、Cloud Logging との比較。表計算のひな形つき |
+| [導入](docs/ja/04-setup.md) | 始める前の注意、Terraform での構築、作成後の設定の変更、削除 |
+| [ブラウザで導入する](docs/ja/05-setup-console.md) | Terraform を使えない環境向けに、同じ構成を Google Cloud と ClickHouse Cloud の画面だけで作る（画面の画像つき） |
+| [ハンズオン](docs/ja/06-hands-on.md) | ローカルの `clickhouse local` だけで SQL を動かす第 1 部、Terraform で実環境に構築して ClickStack で検索する第 2 部、同じものを gcloud と clickhousectl で 1 つずつ作る第 3 部 |
+| [運用](docs/ja/07-operations.md) | 日常の確認、監視とアラート、ノイズの除去、L2 と L3、避ける操作、保持期間の変更、本番ログへの切り替え、L0・L1 の作り直し（付録） |
+| [トラブルシューティング](docs/ja/08-troubleshooting.md) | 取り込みの遅れ、MV のエラー、1 回の INSERT がまたぐパーティション、パーツの数を、症状から切り分ける手順 |
+| [検証記録](docs/ja/09-findings.md) | 実機で確かめた挙動と数値 |
 
 <details>
 <summary><b>ディレクトリ構成</b></summary>
@@ -99,6 +100,7 @@ gcloud と clickhousectl で 1 つずつ作りながら仕組みを確かめる�
 | `loadgen/gen_logentry.py` | 合成 LogEntry の生成と Pub/Sub への公開（標準ライブラリのみ） |
 | `verify/local_e2e.sh` | ローカルの ClickHouse で SQL 一式を通して確認する |
 | `verify/completeness.sh` | 公開したメッセージ ID の全件と L0、L1 を突き合わせる |
+| `docs/files/cost_estimate.csv` | 費用の見積もりの表計算のひな形（英語版は `cost_estimate.en.csv`）。ドキュメントサイトからもダウンロードできる |
 | `verify/checks.sql` | 遅延、処理が停滞したバッチ、重複、遅延到着、解析の状態、滞留、パイプの INSERT、パーツの数などの定期確認 |
 | `tools/chq.py` | SQL ファイルを 1 文ずつ `clickhousectl cloud service query` で実行する |
 | `tools/wait_subscriptions_gone.py` | ClickPipes が管理サブスクリプションを削除し終えるのを待つ（`terraform destroy` が使う） |

@@ -8,7 +8,7 @@
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 [![ClickHouse Cloud](https://img.shields.io/badge/ClickHouse_Cloud-26.6%2B-FAFF69?logo=clickhouse&logoColor=black)](https://clickhouse.com/cloud)
 [![Terraform](https://img.shields.io/badge/Terraform-%E2%89%A5_1.9-7B42BC?logo=terraform&logoColor=white)](terraform/)
-[![Pub/Sub ClickPipes](https://img.shields.io/badge/Pub%2FSub_ClickPipes-Private_Preview-orange)](docs/en/08-findings.md)
+[![Pub/Sub ClickPipes](https://img.shields.io/badge/Pub%2FSub_ClickPipes-Private_Preview-orange)](docs/en/09-findings.md)
 
 English · [日本語](README.ja.md)
 
@@ -18,8 +18,8 @@ English · [日本語](README.ja.md)
 
 > [!NOTE]
 > Pub/Sub ClickPipes was in Private Preview when this was tested (2026-10), and its behavior may change.
-> The main behavior was observed on real services; dates, versions, conditions, numbers and untested items are in the [findings](docs/en/08-findings.md).
-> Repeat the checks in the [hands-on](docs/en/05-hands-on.md) before adopting it.
+> The main behavior was observed on real services; dates, versions, conditions, numbers and untested items are in the [findings](docs/en/09-findings.md).
+> Repeat the checks in the [hands-on](docs/en/06-hands-on.md) before adopting it.
 
 ## Highlights
 
@@ -65,12 +65,12 @@ verify/local_e2e.sh 20000
 
 It prints a table that reconciles row counts across L0, L1, L2, L3, and the noise counts, and compares Japanese full-text search with LIKE.
 
-To deploy to real services, follow [Setup](docs/en/03-setup.md) and use Terraform.
-To build the pieces one at a time with gcloud and clickhousectl and see what each does, follow part 3 of the [Hands-on](docs/en/05-hands-on.md).
+To deploy to real services, follow [Setup](docs/en/04-setup.md) and use Terraform.
+To build the pieces one at a time with gcloud and clickhousectl and see what each does, follow part 3 of the [Hands-on](docs/en/06-hands-on.md).
 
 > [!WARNING]
 > From `terraform apply` on, the sink sends every log of the project to Pub/Sub, which is billed.
-> Read "Before you start" in [Setup](docs/en/03-setup.md) first, and try it in a test project.
+> Read "Before you start" in [Setup](docs/en/04-setup.md) first, and try it in a test project.
 
 ## Documents
 
@@ -79,13 +79,14 @@ The same documents are also on the [docs site](https://tkykenmt-at-ch.github.io/
 | Document | Contents |
 |---|---|
 | [Design](docs/en/01-design.md) | Key points, layer roles, when to build an L2, design details |
-| [Planning](docs/en/02-planning.md) | Decisions for your environment, size estimation, cost estimation, monthly cost from PoC measurements |
-| [Setup](docs/en/03-setup.md) | Cautions before you start, deploying with Terraform, changing settings, removal |
-| [Setup in the browser](docs/en/04-setup-console.md) | Without Terraform: the same configuration built only in the Google Cloud and ClickHouse Cloud consoles, with screenshots |
-| [Hands-on](docs/en/05-hands-on.md) | Part 1 runs the SQL on a local `clickhouse local`; part 2 deploys to real services with Terraform and searches in ClickStack; part 3 builds the same pieces one at a time with gcloud and clickhousectl |
-| [Operations](docs/en/06-operations.md) | Daily checks, monitoring and alerts, noise rules, L2 and L3, operations to avoid, retention, switching production logs, rebuilding L0 and L1 (appendix) |
-| [Troubleshooting](docs/en/07-troubleshooting.md) | Narrowing down ingest delay, MV failures, inserts spanning too many partitions, and part counts from the symptom |
-| [Findings](docs/en/08-findings.md) | Observed behavior and measurements |
+| [Planning](docs/en/02-planning.md) | Decisions for your environment, sizing ClickPipes and the service |
+| [Estimating cost](docs/en/03-cost.md) | A rough estimate before the PoC, the monthly cost from PoC measurements, and the comparison with Cloud Logging, with a spreadsheet template |
+| [Setup](docs/en/04-setup.md) | Cautions before you start, deploying with Terraform, changing settings, removal |
+| [Setup in the browser](docs/en/05-setup-console.md) | Without Terraform: the same configuration built only in the Google Cloud and ClickHouse Cloud consoles, with screenshots |
+| [Hands-on](docs/en/06-hands-on.md) | Part 1 runs the SQL on a local `clickhouse local`; part 2 deploys to real services with Terraform and searches in ClickStack; part 3 builds the same pieces one at a time with gcloud and clickhousectl |
+| [Operations](docs/en/07-operations.md) | Daily checks, monitoring and alerts, noise rules, L2 and L3, operations to avoid, retention, switching production logs, rebuilding L0 and L1 (appendix) |
+| [Troubleshooting](docs/en/08-troubleshooting.md) | Narrowing down ingest delay, MV failures, inserts spanning too many partitions, and part counts from the symptom |
+| [Findings](docs/en/09-findings.md) | Observed behavior and measurements |
 
 <details>
 <summary><b>Repository layout</b></summary>
@@ -99,6 +100,7 @@ The same documents are also on the [docs site](https://tkykenmt-at-ch.github.io/
 | `loadgen/gen_logentry.py` | Synthetic LogEntry generator and Pub/Sub publisher (standard library only) |
 | `verify/local_e2e.sh` | End-to-end check of the SQL on a local ClickHouse |
 | `verify/completeness.sh` | Reconciles every published message ID with L0 and L1 |
+| `docs/files/cost_estimate.en.csv` | Spreadsheet template for the cost estimate (Japanese: `cost_estimate.csv`); also downloadable from the docs site |
 | `verify/checks.sql` | Periodic checks: latency, stuck batches, duplicates, late arrivals, parser health, backlog, pipe inserts, part counts |
 | `tools/chq.py` | Runs SQL files one statement at a time through `clickhousectl cloud service query` |
 | `tools/wait_subscriptions_gone.py` | Waits until ClickPipes has deleted its managed subscription (used by `terraform destroy`) |

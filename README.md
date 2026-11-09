@@ -8,7 +8,7 @@
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 [![ClickHouse Cloud](https://img.shields.io/badge/ClickHouse_Cloud-26.6%2B-FAFF69?logo=clickhouse&logoColor=black)](https://clickhouse.com/cloud)
 [![Terraform](https://img.shields.io/badge/Terraform-%E2%89%A5_1.9-7B42BC?logo=terraform&logoColor=white)](terraform/)
-[![Pub/Sub ClickPipes](https://img.shields.io/badge/Pub%2FSub_ClickPipes-Private_Preview-orange)](docs/en/findings.md)
+[![Pub/Sub ClickPipes](https://img.shields.io/badge/Pub%2FSub_ClickPipes-Private_Preview-orange)](docs/en/08-findings.md)
 
 English · [日本語](README.ja.md)
 
@@ -18,8 +18,8 @@ English · [日本語](README.ja.md)
 
 > [!NOTE]
 > Pub/Sub ClickPipes was in Private Preview when this was tested (2026-10), and its behavior may change.
-> The main behavior was observed on real services; dates, versions, conditions, numbers and untested items are in the [findings](docs/en/findings.md).
-> Repeat the checks in the [hands-on](docs/en/hands-on.md) before adopting it.
+> The main behavior was observed on real services; dates, versions, conditions, numbers and untested items are in the [findings](docs/en/08-findings.md).
+> Repeat the checks in the [hands-on](docs/en/05-hands-on.md) before adopting it.
 
 ## Highlights
 
@@ -53,7 +53,7 @@ Materialized views (MVs) parse and shape the ingested logs.
 | L2 | No | A typed table for one kind of log. Only when L1 cannot meet a requirement |
 | L3 | No | Aggregates, for long-range trends or keeping aggregates longer than rows |
 
-How the tables and MVs connect, and their columns, are in "Overview" and "Table definitions" of [Design](docs/en/design.md).
+How the tables and MVs connect, and their columns, are in "Overview" and "Table definitions" of [Design](docs/en/01-design.md).
 
 ## Quick start
 
@@ -65,12 +65,12 @@ verify/local_e2e.sh 20000
 
 It prints a table that reconciles row counts across L0, L1, L2, L3, and the noise counts, and compares Japanese full-text search with LIKE.
 
-To deploy to real services, follow [Setup](docs/en/setup.md) and use Terraform.
-To build the pieces one at a time with gcloud and clickhousectl and see what each does, follow part 3 of the [Hands-on](docs/en/hands-on.md).
+To deploy to real services, follow [Setup](docs/en/03-setup.md) and use Terraform.
+To build the pieces one at a time with gcloud and clickhousectl and see what each does, follow part 3 of the [Hands-on](docs/en/05-hands-on.md).
 
 > [!WARNING]
 > From `terraform apply` on, the sink sends every log of the project to Pub/Sub, which is billed.
-> Read "Before you start" in [Setup](docs/en/setup.md) first, and try it in a test project.
+> Read "Before you start" in [Setup](docs/en/03-setup.md) first, and try it in a test project.
 
 ## Documents
 
@@ -78,14 +78,14 @@ The same documents are also on the [docs site](https://tkykenmt-at-ch.github.io/
 
 | Document | Contents |
 |---|---|
-| [Design](docs/en/design.md) | Key points, layer roles, when to build an L2, design details |
-| [Planning](docs/en/planning.md) | Decisions for your environment, size estimation, cost estimation, monthly cost from PoC measurements |
-| [Setup](docs/en/setup.md) | Cautions before you start, deploying with Terraform, changing settings, removal |
-| [Setup in the browser](docs/en/setup-console.md) | Without Terraform: the same configuration built only in the Google Cloud and ClickHouse Cloud consoles, with screenshots |
-| [Hands-on](docs/en/hands-on.md) | Part 1 runs the SQL on a local `clickhouse local`; part 2 deploys to real services with Terraform and searches in ClickStack; part 3 builds the same pieces one at a time with gcloud and clickhousectl |
-| [Troubleshooting](docs/en/troubleshooting.md) | Narrowing down ingest delay, MV failures, inserts spanning too many partitions, and part counts from the symptom |
-| [Operations](docs/en/operations.md) | Daily checks, monitoring and alerts, noise rules, L2 and L3, operations to avoid, retention, switching production logs, rebuilding L0 and L1 (appendix) |
-| [Findings](docs/en/findings.md) | Observed behavior and measurements |
+| [Design](docs/en/01-design.md) | Key points, layer roles, when to build an L2, design details |
+| [Planning](docs/en/02-planning.md) | Decisions for your environment, size estimation, cost estimation, monthly cost from PoC measurements |
+| [Setup](docs/en/03-setup.md) | Cautions before you start, deploying with Terraform, changing settings, removal |
+| [Setup in the browser](docs/en/04-setup-console.md) | Without Terraform: the same configuration built only in the Google Cloud and ClickHouse Cloud consoles, with screenshots |
+| [Hands-on](docs/en/05-hands-on.md) | Part 1 runs the SQL on a local `clickhouse local`; part 2 deploys to real services with Terraform and searches in ClickStack; part 3 builds the same pieces one at a time with gcloud and clickhousectl |
+| [Operations](docs/en/06-operations.md) | Daily checks, monitoring and alerts, noise rules, L2 and L3, operations to avoid, retention, switching production logs, rebuilding L0 and L1 (appendix) |
+| [Troubleshooting](docs/en/07-troubleshooting.md) | Narrowing down ingest delay, MV failures, inserts spanning too many partitions, and part counts from the symptom |
+| [Findings](docs/en/08-findings.md) | Observed behavior and measurements |
 
 <details>
 <summary><b>Repository layout</b></summary>
@@ -109,7 +109,7 @@ The same documents are also on the [docs site](https://tkykenmt-at-ch.github.io/
 ## Out of scope
 
 - Mapping Logs Explorer features to ClickStack features
-- Confirming pipe and service sizes by load testing (the estimate in [design](docs/en/design.md) follows the official guidelines, and the load tests in the findings are small)
+- Confirming pipe and service sizes by load testing (the estimate in [design](docs/en/01-design.md) follows the official guidelines, and the load tests in the findings are small)
 - Changing the `_Default` bucket sink (moving production logs over follows your own change process)
 
 ## License

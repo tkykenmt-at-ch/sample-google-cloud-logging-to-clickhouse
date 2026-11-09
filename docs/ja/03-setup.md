@@ -1,29 +1,29 @@
 # 導入
 
-[English](../en/setup.md) | 日本語
+[English](../en/03-setup.md) | 日本語
 
 Terraform で、Google Cloud 側のリソース、ClickHouse のテーブルと MV、ClickPipe、ClickStack のソースとダッシュボードを作ります。
 Terraform を使う場合は、このページの「手順」の節だけを実行します。
-Terraform を使えない場合は、同じ構成を画面だけで作る [ブラウザで導入する](setup-console.md) を使います（どちらか一方だけを実行します）。
-gcloud と clickhousectl で 1 つずつ作りながら仕組みを確かめる手順は、[ハンズオン](hands-on.md) の第 3 部にあります。
-設計の理由は [設計](design.md) にあります。
+Terraform を使えない場合は、同じ構成を画面だけで作る [ブラウザで導入する](04-setup-console.md) を使います（どちらか一方だけを実行します）。
+gcloud と clickhousectl で 1 つずつ作りながら仕組みを確かめる手順は、[ハンズオン](05-hands-on.md) の第 3 部にあります。
+設計の理由は [設計](01-design.md) にあります。
 
 ## 始める前に
 
 - **まず検証用のプロジェクトで試します。**
   `terraform apply` を実行した時点から、シンクはプロジェクトの全ログをトピックへ送ります。
 - **Pub/Sub の料金がかかります。**
-  検証環境では、Pub/Sub に送った量が Cloud Logging の課金対象の約 5 倍になりました（[検証記録](findings.md) の「Pub/Sub の課金対象量」）。
+  検証環境では、Pub/Sub に送った量が Cloud Logging の課金対象の約 5 倍になりました（[検証記録](08-findings.md) の「Pub/Sub の課金対象量」）。
   差の大半は、Cloud Logging が課金しない `_Required` 行きの監査ログでした（課金対象のログだけなら約 1.2 倍）。
   量の多いノイズは、`sink_exclusions` でシンクから除外できます。
 - **サービスアカウントの鍵は Terraform の state に保存されます。**
   state は、暗号化したリモートのバックエンドに、アクセスを絞って置きます（`terraform/terraform.tf` に例があります）。
-  組織で Workload Identity（Private Preview）が有効なら、`clickpipes_auth = "workload_identity"` で鍵を使わずに読ませられます（[運用](operations.md) の「鍵から Workload Identity へ切り替える」）。
+  組織で Workload Identity（Private Preview）が有効なら、`clickpipes_auth = "workload_identity"` で鍵を使わずに読ませられます（[運用](06-operations.md) の「鍵から Workload Identity へ切り替える」）。
 - **ClickPipes の権限はプロジェクト全体に及びます。**
   公式の最小権限ロール（[Pub/Sub IAM permissions](https://clickhouse.com/docs/integrations/clickpipes/pubsub/auth)）は、プロジェクト内のサブスクリプションの作成、受信、削除を許します。
   範囲が広すぎる場合は、ログの送出専用のプロジェクトにトピックを置きます。
 - **既存の `_Default` バケットへの保存は変わりません。**
-  保存を止める作業は導入に含めず、[運用](operations.md) の「本番ログへ切り替える」で扱います。
+  保存を止める作業は導入に含めず、[運用](06-operations.md) の「本番ログへ切り替える」で扱います。
 
 ## 作成するリソース
 
@@ -98,7 +98,7 @@ cp terraform.tfvars.example terraform.tfvars
 | `landing_ttl_days` | 7 | 取り込みの遅延、切り替えとバックフィル、照合とロールバックに必要な期間に余裕を加える |
 | `logs_ttl_days` | 400 | ログの保持要件 |
 | `pipe_seek_type` | `latest` | 新しい管理サブスクリプションの開始位置。トピックに保持がないので、通常は変えない |
-| `pipe_replicas` など | 1 レプリカ、最小サイズ（約 7 MB/s） | 検証向けの値。本番では [計画](planning.md) の「大きさの見積もり方」で決めた大きさと数にする |
+| `pipe_replicas` など | 1 レプリカ、最小サイズ（約 7 MB/s） | 検証向けの値。本番では [計画](02-planning.md) の「大きさの見積もり方」で決めた大きさと数にする |
 | `clickstack_connection_id` | なし | ClickStack のソースとダッシュボードを作るとき（下の 4） |
 
 ### 3. 計画を確かめてから適用する
@@ -143,15 +143,15 @@ python3 tools/chq.py verify/checks.sql
 
 シンクから届いたログが L0 と L1 に入っていれば、取り込みは動いています。
 ここで導入は完了です。
-定期的な確認項目は [運用](operations.md) の「日常の確認」にあります。
+定期的な確認項目は [運用](06-operations.md) の「日常の確認」にあります。
 
 ## 作成後に設定を変える
 
 | 変えるもの | 方法 |
 |---|---|
 | シンクのフィルタと除外、パイプのサイズ、ClickStack のソース | `terraform.tfvars` を変えて `terraform apply` |
-| L0、L1、集計テーブルの TTL | `ALTER TABLE ... MODIFY TTL`（[運用](operations.md) の「保持期間を変える」）。`terraform.tfvars` の値は、作り直すときのために合わせておく |
-| L1 の列や解析の内容 | [運用](operations.md) の手順（MV の `MODIFY QUERY`） |
+| L0、L1、集計テーブルの TTL | `ALTER TABLE ... MODIFY TTL`（[運用](06-operations.md) の「保持期間を変える」）。`terraform.tfvars` の値は、作り直すときのために合わせておく |
+| L1 の列や解析の内容 | [運用](06-operations.md) の手順（MV の `MODIFY QUERY`） |
 
 ## リソースを削除する
 

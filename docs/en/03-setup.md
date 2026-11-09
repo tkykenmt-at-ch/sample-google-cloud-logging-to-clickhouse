@@ -1,20 +1,20 @@
 # Setup
 
-English | [日本語](../ja/setup.md)
+English | [日本語](../ja/03-setup.md)
 
 Terraform creates the Google Cloud resources, the ClickHouse tables and MVs, the ClickPipe, and the ClickStack source and dashboard.
 With Terraform, run only the "Steps" section of this page.
-Without Terraform, build the same configuration in the consoles with [Setup in the browser](setup-console.md) (run one or the other, not both).
-To build the same pieces one at a time with gcloud and clickhousectl and see what each does, follow part 3 of the [Hands-on](hands-on.md).
-The reasoning is in [Design](design.md).
+Without Terraform, build the same configuration in the consoles with [Setup in the browser](04-setup-console.md) (run one or the other, not both).
+To build the same pieces one at a time with gcloud and clickhousectl and see what each does, follow part 3 of the [Hands-on](05-hands-on.md).
+The reasoning is in [Design](01-design.md).
 
 ## Before you start
 
 - **Try it in a test project first.** From the moment `terraform apply` runs, the sink sends every log of the project to the topic.
-- **Pub/Sub is billed.** In the test environment, the volume sent to Pub/Sub was about 5 times the Cloud Logging billable volume ([Findings](findings.md), "Bytes that drive Pub/Sub cost"). Most of the difference was audit logs routed to `_Required`, which Cloud Logging does not bill (for billable logs alone it was about 1.2 times). High-volume noise can be excluded at the sink with `sink_exclusions`.
-- **The service account key is stored in the Terraform state.** Keep the state in an encrypted remote backend with restricted access (`terraform/terraform.tf` has an example). If workload identity (Private Preview) is enabled for your organization, `clickpipes_auth = "workload_identity"` reads without a key ("Switching from a key to workload identity" in [Operations](operations.md)).
+- **Pub/Sub is billed.** In the test environment, the volume sent to Pub/Sub was about 5 times the Cloud Logging billable volume ([Findings](08-findings.md), "Bytes that drive Pub/Sub cost"). Most of the difference was audit logs routed to `_Required`, which Cloud Logging does not bill (for billable logs alone it was about 1.2 times). High-volume noise can be excluded at the sink with `sink_exclusions`.
+- **The service account key is stored in the Terraform state.** Keep the state in an encrypted remote backend with restricted access (`terraform/terraform.tf` has an example). If workload identity (Private Preview) is enabled for your organization, `clickpipes_auth = "workload_identity"` reads without a key ("Switching from a key to workload identity" in [Operations](06-operations.md)).
 - **The ClickPipes permissions cover the whole project.** The official least-privilege role ([Pub/Sub IAM permissions](https://clickhouse.com/docs/integrations/clickpipes/pubsub/auth)) allows creating, consuming and deleting subscriptions anywhere in the project. If that is too broad, put the topic in a project dedicated to log export.
-- **Storage in the existing `_Default` bucket does not change.** Stopping it is not part of the setup; see "Switching production logs" in [Operations](operations.md).
+- **Storage in the existing `_Default` bucket does not change.** Stopping it is not part of the setup; see "Switching production logs" in [Operations](06-operations.md).
 
 ## What gets created
 
@@ -88,7 +88,7 @@ All variables and defaults are in `terraform/variables.tf`, and invalid values a
 | `landing_ttl_days` | 7 | Ingest delay + switch and backfill + verification and rollback, plus a margin |
 | `logs_ttl_days` | 400 | Log retention requirement |
 | `pipe_seek_type` | `latest` | Start position of a new managed subscription. Leave as is: the topic keeps no messages |
-| `pipe_replicas` etc. | 1 replica, smallest size (about 7 MB/s) | A trial value. In production, use the size and number from "Estimating size" in [planning](planning.md) |
+| `pipe_replicas` etc. | 1 replica, smallest size (about 7 MB/s) | A trial value. In production, use the size and number from "Estimating size" in [planning](02-planning.md) |
 | `clickstack_connection_id` | None | To create the ClickStack source and dashboard (step 4) |
 
 ### 3. Check the plan, then apply
@@ -133,15 +133,15 @@ python3 tools/chq.py verify/checks.sql
 
 If logs from the sink are arriving in L0 and L1, ingestion is working.
 This completes the setup.
-The periodic checks are in "Daily checks" in [Operations](operations.md).
+The periodic checks are in "Daily checks" in [Operations](06-operations.md).
 
 ## Changing settings after creation
 
 | What | How |
 |---|---|
 | Sink filter and exclusions, pipe size, ClickStack source | Change `terraform.tfvars` and run `terraform apply` |
-| TTL of L0, L1 and the aggregate tables | `ALTER TABLE ... MODIFY TTL` ("Changing retention" in [Operations](operations.md)). Keep `terraform.tfvars` in line for a rebuild |
-| L1 columns or parsing | The procedures in [Operations](operations.md) (`MODIFY QUERY` on the MV) |
+| TTL of L0, L1 and the aggregate tables | `ALTER TABLE ... MODIFY TTL` ("Changing retention" in [Operations](06-operations.md)). Keep `terraform.tfvars` in line for a rebuild |
+| L1 columns or parsing | The procedures in [Operations](06-operations.md) (`MODIFY QUERY` on the MV) |
 
 ## Removing the resources
 

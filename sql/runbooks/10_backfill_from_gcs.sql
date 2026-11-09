@@ -1,7 +1,7 @@
 -- Runbook 10 (optional): backfill logs stored in Cloud Logging before the Pub/Sub sink existed.
 -- The sink and the pipe only carry logs received after the sink was created. Older logs are copied from
 -- the log bucket to Cloud Storage (gcloud logging copy), then inserted into L0 here, so MV1, the noise MV
--- and the rollup run exactly as for live logs. See docs/en/operations.md, "Backfilling existing logs".
+-- and the rollup run exactly as for live logs. See docs/en/06-operations.md, "Backfilling existing logs".
 --
 -- Variables:
 --   {{GCS_URL}}    copied files, e.g. https://storage.googleapis.com/<bucket>/**.json

@@ -188,7 +188,7 @@ The Pub/Sub free tier is 10 GiB per billing account per month, shared by publish
 
 ## Estimating cost from PoC measurements
 
-Once production volume is flowing, estimate the monthly cost from what you measure in your own environment. Every input comes from your Cloud Logging, Pub/Sub and ClickHouse Cloud. A spreadsheet template is in `verify/cost_estimate.csv` (in Google Sheets, File → Import keeps the formulas working).
+Once production volume is flowing, estimate the monthly cost from what you measure in your own environment. Every input comes from your Cloud Logging, Pub/Sub and ClickHouse Cloud. A spreadsheet template is in `verify/cost_estimate.en.csv` (Japanese: `verify/cost_estimate.csv`; in Google Sheets, File → Import keeps the formulas working).
 
 **Baseline period**
 
@@ -200,9 +200,9 @@ Once production volume is flowing, estimate the monthly cost from what you measu
 
 | Volume | How |
 |---|---|
-| Stored size per day (compressed) and compression ratio | Check 17 in `verify/checks.sql` (per table and day) |
+| Stored size per day and compression ratio | Check 17 in `verify/checks.sql` (per table and day). Storage is billed on `on_disk_gb`, which includes skip indexes (in L1 the text index on Body is a large share); `compressed_gb` and `ratio` cover column data only |
 | Bytes read by ClickPipes | The pipe's Metrics tab, or `ClickPipes_FetchedBytes_Total` from the Prometheus endpoint ([ClickPipes monitoring](https://clickhouse.com/docs/integrations/clickpipes/monitoring)) |
-| Pub/Sub publish and delivery bytes billed | `topic/byte_cost` and `subscription/byte_cost` from "What to measure while running in parallel" above. After a month of parallel running, compare with the "Message Delivery Basic" SKU on the bill |
+| Pub/Sub publish and delivery bytes billed | `topic/byte_cost` and `subscription/byte_cost` from "What to measure while running in parallel" above. For delivery, add up every subscription that reads the topic (each pipe has its own managed subscription). After a month of parallel running, compare with the "Message Delivery Basic" SKU on the bill |
 | Service compute, storage and backups | ClickHouse Cloud console, Settings → Usage breakdown (per day, at list price, downloadable as CSV; [tracking spend](https://clickhouse.com/docs/products/cloud/reference/billing/billing-overview#how-can-i-keep-track-of-my-spending)) |
 | Billable Cloud Logging volume | The usage of the "Log Storage cost" SKU in the billing report filtered to Cloud Logging, or `logging.googleapis.com/billing/bytes_ingested` |
 
@@ -210,12 +210,12 @@ Once production volume is flowing, estimate the monthly cost from what you measu
 
 | Item | Formula |
 |---|---|
-| Storage | (L1 compressed per day × L1 retention days + L0 compressed per day × L0 retention days) × storage price |
+| Storage | (L1 on-disk size per day × L1 retention days + L0 on-disk size per day × L0 retention days) × storage price. Add L2 and aggregate tables the same way if you build them |
 | Backups | current backups ÷ current storage × the storage above |
 | Service compute | compute per day from Usage breakdown × days. If production uses a plan with a different price, multiply by the price ratio |
 | ClickPipes | total replica units × compute price × hours + bytes read × ingested-data price |
 | Pub/Sub | (publish bytes billed + delivery bytes billed) × $40/TiB |
-| Keeping the logs in Cloud Logging instead | billable volume × $0.50/GiB + billable volume × (retention days − 30) ÷ 30.42 × $0.01/GiB (retention beyond 30 days, [pricing](https://cloud.google.com/stackdriver/pricing)) |
+| Keeping the logs in Cloud Logging instead | billable volume × $0.50/GiB + billable volume × (retention days − 30) ÷ 30.42 × $0.01/GiB (retention beyond 30 days, [pricing](https://cloud.google.com/stackdriver/pricing)). The free 50 GiB per project per month is not included |
 
 - Take each price from its pricing page with your cloud, region and plan selected ([ClickHouse Cloud](https://clickhouse.com/pricing), [ClickPipes](https://clickhouse.com/docs/products/cloud/reference/billing/clickpipes/clickpipes-for-streaming-and-object-storage), [Pub/Sub](https://cloud.google.com/pubsub/pricing)). For Pub/Sub ClickPipes pricing, ask ClickHouse as noted in "Cost items" above.
 - Compute measured during the PoC covers ingestion only. Add search once the representative queries are measured ("Service" under "Estimating size" below).

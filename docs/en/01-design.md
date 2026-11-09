@@ -1,6 +1,6 @@
 # Design
 
-English | [日本語](../ja/design.md)
+English | [日本語](../ja/01-design.md)
 
 This document explains the design decisions for ingesting Google Cloud Logging logs into ClickHouse Cloud with Pub/Sub and ClickPipes, and searching and visualizing them in ClickStack.
 The configuration is one example; adjust it to your log types, volumes, and retention requirements.
@@ -8,9 +8,9 @@ The configuration is one example; adjust it to your log types, volumes, and rete
 > The behavior described here was observed on ClickHouse Cloud 26.6 with Pub/Sub ClickPipes (Private Preview).
 > Private Preview features may change in behavior and pricing before general availability (GA).
 > "(verified)" marks behavior observed on real services, "(docs)" marks statements from official documentation (the link is the source), and "(PoC)" marks items to confirm in your own environment.
-> Test conditions and numbers are in the [findings](findings.md).
+> Test conditions and numbers are in the [findings](08-findings.md).
 
-Decisions for your environment and size and cost estimates are in [Planning](planning.md), deployment is in [Setup](setup.md), a guided run is in the [Hands-on](hands-on.md), and procedures are in [Operations](operations.md).
+Decisions for your environment and size and cost estimates are in [Planning](02-planning.md), deployment is in [Setup](03-setup.md), a guided run is in the [Hands-on](05-hands-on.md), and procedures are in [Operations](06-operations.md).
 
 ## Key points
 
@@ -20,7 +20,7 @@ Decisions for your environment and size and cost estimates are in [Planning](pla
 - **Size**: derive the ingest rate from the billable Cloud Logging volume, and size the ClickPipes replicas and the service with the official guidelines. The ClickPipes default (one replica of the smallest size) is meant for trials and may not keep up with production volume.
 - **New costs**: Pub/Sub throughput, ClickPipes, and ClickHouse Cloud. Pub/Sub charges also apply to logs that Cloud Logging does not bill, so measure while running both paths in parallel.
 - **Japanese search**: with a 2-character n-gram full-text index on the body, ClickStack can search Japanese words.
-- **Decisions for your environment**: target projects, retention per log kind, who can see what, and what to do with past logs ([Planning](planning.md)).
+- **Decisions for your environment**: target projects, retention per log kind, who can see what, and what to do with past logs ([Planning](02-planning.md)).
 
 ## Overview
 
@@ -130,7 +130,7 @@ GROUP BY ProjectId, Region
 ORDER BY rows DESC;
 ```
 
-If you filter or aggregate by region often, put this expression into a derived column of your L1 (appendix A1 of [Operations](operations.md)) or into an L2.
+If you filter or aggregate by region often, put this expression into a derived column of your L1 (appendix A1 of [Operations](06-operations.md)) or into an L2.
 
 ## When to build an L2
 
@@ -150,7 +150,7 @@ Otherwise, search L1 and extract values into tables and charts.
 - Do not build an L2 for one-off investigations, low-volume logs, or logs whose payload shape is not stable.
 - Add an L3 when long-range trend charts must be fast or when aggregates must be kept longer than rows.
 
-How to build L2 and L3 is in [Operations](operations.md).
+How to build L2 and L3 is in [Operations](06-operations.md).
 
 ## Design details
 
@@ -221,7 +221,7 @@ Treat ClickHouse as a copy for analysis alongside other logs.
   It is deleted with the pipe and kept when the pipe is only stopped. (verified)
 - Unacknowledged messages on the managed subscription incur no storage charge within one day of publishing. If ingestion stops for more than a day, the backlog starts incurring storage. (docs: [storage costs](https://cloud.google.com/pubsub/pricing#storage_costs))
 - The pipe inserts about every 5 seconds. Publish to stored took about 3 s at the median and about 5 s at p99. (verified)
-- Size and number of replicas come from the ingest rate in "Estimating size" in [Planning](planning.md). The default is one replica of the smallest size (XS). (docs; values for your volume are PoC)
+- Size and number of replicas come from the ingest rate in "Estimating size" in [Planning](02-planning.md). The default is one replica of the smallest size (XS). (docs; values for your volume are PoC)
 
 **Authentication and network**
 

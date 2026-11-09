@@ -1,6 +1,6 @@
 # Findings
 
-English | [日本語](../ja/findings.md)
+English | [日本語](../ja/08-findings.md)
 
 Results observed on ClickHouse Cloud and Google Cloud test environments from 2026-10-01 to 05.
 Pub/Sub ClickPipes is in Private Preview and ClickHouse Cloud upgrades automatically, so the behavior described here may change.
@@ -133,7 +133,7 @@ Higher rates (tens of MB/s) were not tested.
 
 ## Migrating an existing pipeline (real logs)
 
-An existing pipeline that ingested an internal GCP project's Cloud Logging (landing table with `_raw_message` only, MVs splitting audit and GKE logs) was moved to this layout with the procedure in `sql/runbooks/06_migrate_legacy_pipeline.sql` (appendix A5 in [Operations](operations.md)).
+An existing pipeline that ingested an internal GCP project's Cloud Logging (landing table with `_raw_message` only, MVs splitting audit and GKE logs) was moved to this layout with the procedure in `sql/runbooks/06_migrate_legacy_pipeline.sql` (appendix A5 in [Operations](06-operations.md)).
 The rate was about 18 msg/s (about 1.55 million entries a day, 96% of them k8s.io Lease update audit logs).
 
 | Item | Result |
@@ -221,7 +221,7 @@ Attributes use the Map type, as ClickStack officially recommends (the JSON type 
 
 ## Moving the main L1 (Blue/Green, 2026-10-02)
 
-The L1 with the old schema (index on attribute values, word tokenizer for the body) was moved to `gcl_logs_v2` with the new schema (`key=value` indexes, ngrams(2) for the body, `with_buckets` Maps) following `sql/runbooks/03_blue_green.sql` (appendix A3 in [Operations](operations.md)).
+The L1 with the old schema (index on attribute values, word tokenizer for the body) was moved to `gcl_logs_v2` with the new schema (`key=value` indexes, ngrams(2) for the body, `with_buckets` Maps) following `sql/runbooks/03_blue_green.sql` (appendix A3 in [Operations](06-operations.md)).
 
 - The MV feeding rows published from T on was created 5 minutes before T. The first v2 row was published 0.348 seconds after T, and the number of MessageIds from T on matched v1 (1,813).
 - Rows before T were copied from v1 in 6-hour ranges, checking counts per range (18,921,930 rows in total). One count check failed and stopped the run, but it was before the copy, so the run resumed by skipping completed ranges.
@@ -270,7 +270,7 @@ The plan was the same through the stable view (`gcl.logs`).
 ## Deployment procedures (Terraform and gcloud/clickhousectl, 2026-10-02)
 
 Both procedures were run from creation to removal on a test project and service.
-`cli/deploy.sh` and `cli/destroy.sh` were later removed from the repository; the same commands are in part 3 of the [Hands-on](hands-on.md).
+`cli/deploy.sh` and `cli/destroy.sh` were later removed from the repository; the same commands are in part 3 of the [Hands-on](05-hands-on.md).
 
 | Procedure | Result |
 |---|---|
@@ -282,7 +282,7 @@ Both procedures were run from creation to removal on a test project and service.
 
 ## Deploying to a new service in Tokyo (Terraform, 2026-10-05)
 
-A new service (26.6, 8 GB memory) was created in GCP Tokyo (`asia-northeast1`) with `clickhousectl cloud service create`, and the [Setup](setup.md) steps were run against it from an empty state.
+A new service (26.6, 8 GB memory) was created in GCP Tokyo (`asia-northeast1`) with `clickhousectl cloud service create`, and the [Setup](03-setup.md) steps were run against it from an empty state.
 Message storage was pinned to Tokyo with `topic_storage_regions = ["asia-northeast1"]`, the sink filter matched no real logs, and only synthetic logs were published.
 
 | Step | Result |
@@ -300,7 +300,7 @@ Message storage was pinned to Tokyo with `topic_storage_regions = ["asia-northea
 
 ## Setup in the browser (2026-10-05)
 
-The [Setup in the browser](setup-console.md) steps were run in the Google Cloud and ClickHouse Cloud consoles only, against a test project and a new service in Tokyo (Mini, 26.6).
+The [Setup in the browser](04-setup-console.md) steps were run in the Google Cloud and ClickHouse Cloud consoles only, against a test project and a new service in Tokyo (Mini, 26.6).
 The sink filter was replaced with one that matches no real logs after the screenshot was taken, and only synthetic logs were published.
 
 | Step | Result |
@@ -316,7 +316,7 @@ The sink filter was replaced with one that matches no real logs after the screen
 
 ## Backfilling existing logs (2026-10-05)
 
-The "Backfilling existing logs" procedure in [Operations](operations.md) and `sql/runbooks/10_backfill_from_gcs.sql` were tried on 3 hours of the test project's `_Default` bucket (2026-10-04 00:00 to 03:00 UTC).
+The "Backfilling existing logs" procedure in [Operations](06-operations.md) and `sql/runbooks/10_backfill_from_gcs.sql` were tried on 3 hours of the test project's `_Default` bucket (2026-10-04 00:00 to 03:00 UTC).
 The destination was a separate database with no pipe.
 The same window had also reached the main L1 through the sink, so the two were compared row by row.
 
@@ -338,7 +338,7 @@ The boundary handling and rows older than the L0 TTL were checked on clickhouse 
 
 ## Final check (2026-10-06)
 
-After the final-review fixes, the Terraform steps of [Setup](setup.md) and part 2 of the hands-on were run against a Tokyo service with `topic_storage_regions = ["asia-northeast1"]`.
+After the final-review fixes, the Terraform steps of [Setup](03-setup.md) and part 2 of the hands-on were run against a Tokyo service with `topic_storage_regions = ["asia-northeast1"]`.
 
 | Step | Result |
 |---|---|
@@ -366,7 +366,7 @@ ClickPipes workload identity (Private Preview) was tested in the test environmen
 | Switching back to the key (v3.37.0) | One apply created the service account, key and binding, switched the pipe back to the key, then removed the workload identity binding |
 | Switching from a key with Terraform (v3.37.0, with `create_before_destroy`) | Order: workload identity binding, pipe update, then removal of the old key, binding and service account (about 25 seconds). Across the three switches, all 4,800 messages sent arrived in L0. 400 redelivery duplicates in L0 and L1; distinct `MessageId`s in L1 matched at 4,800. `terraform destroy` removed 8 resources and left nothing |
 | Main pipe of the test environment | Switched with PATCH and stayed Running for 5 minutes. The old key and binding were deleted about 22 minutes later; ingestion continued |
-| In the browser (steps 5 and 7 of [Setup in the browser](setup-console.md)) | Choosing "Workload identity" under "Authentication method" showed the service account to grant. After granting the custom role with "Grant access" in IAM, the connection check and the topic list passed. Running about 30 seconds after creation; the 3,800 synthetic messages sent after creation arrived in L0 and L1 with no loss |
+| In the browser (steps 5 and 7 of [Setup in the browser](04-setup-console.md)) | Choosing "Workload identity" under "Authentication method" showed the service account to grant. After granting the custom role with "Grant access" in IAM, the connection check and the topic list passed. Running about 30 seconds after creation; the 3,800 synthetic messages sent after creation arrived in L0 and L1 with no loss |
 | `clickhousectl` | 0.4.2 (2026-09-03) requires a key file and cannot create workload identity pipes; support is in unreleased changes |
 
 ## Not tested

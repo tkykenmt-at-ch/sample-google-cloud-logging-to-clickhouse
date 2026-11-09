@@ -1,13 +1,13 @@
 # Planning
 
-English | [日本語](../ja/planning.md)
+English | [日本語](../ja/02-planning.md)
 
 What to decide for your environment, and how to estimate size and cost, before deployment and before and after the PoC.
-The configuration and the reasons behind it are in [Design](design.md); deployment is in [Setup](setup.md).
+The configuration and the reasons behind it are in [Design](01-design.md); deployment is in [Setup](03-setup.md).
 
 > Prices and limits were checked against the official documentation on 2026-10-05.
 > Private Preview features may change in behavior and pricing before general availability (GA).
-> The markers "(verified)", "(docs)" and "(PoC)" are explained at the top of [Design](design.md).
+> The markers "(verified)", "(docs)" and "(PoC)" are explained at the top of [Design](01-design.md).
 
 ## Decisions for your environment
 
@@ -22,7 +22,7 @@ The configuration and the reasons behind it are in [Design](design.md); deployme
 | L1 retention | 400 days | Retention requirements per log kind and privacy rules |
 | Body full-text index | `ngrams(2)` | `splitByNonAlpha` if there are no Japanese logs |
 | Attribute Map serialization | `with_buckets` for merged parts, default split threshold (32 keys on average) | Measure the average keys per row; lower the threshold only if it is well above 32 and single-key filters are common |
-| L2 (typed tables) | None | Only for requirements that match "When to build an L2" in [Design](design.md) |
+| L2 (typed tables) | None | Only for requirements that match "When to build an L2" in [Design](01-design.md) |
 | L3 (aggregates) | Per-minute counts from L1 | Whether you need long-range trends or long-lived aggregates |
 | Aggregate table partitions | Daily (`sql/40`, `sql/50`) | The aggregate tables are small (490 KB for 13 days in testing); monthly (`toYYYYMM`) means fewer partitions and parts, but expiry then drops whole months, so retention can run up to a month longer |
 | Numeric and IP types | `HttpLatencySeconds` Float64, `HttpRemoteIp` String | Float32 and IPv6 are smaller (IPv6 turns empty or invalid values into `::`) |
@@ -45,7 +45,7 @@ Before a PoC, decide the following in your environment.
 
 ## Estimating size
 
-Size the ClickPipes replicas and the ClickHouse Cloud service from the same ingest rate. The estimate is a starting point based on the official guidelines; once the parallel run starts, confirm with the checks in [troubleshooting](troubleshooting.md) that nothing backs up.
+Size the ClickPipes replicas and the ClickHouse Cloud service from the same ingest rate. The estimate is a starting point based on the official guidelines; once the parallel run starts, confirm with the checks in [troubleshooting](07-troubleshooting.md) that nothing backs up.
 
 **Ingest rate**
 
@@ -73,7 +73,7 @@ Example (illustrative numbers): 10 TiB billable per month averages 10 × 1,099,5
 - The only published throughput is for Kafka ClickPipes: L at 63 MB/s for JSON (1.6 KB messages, an informal benchmark with ClickHouse not the bottleneck) ([benchmarks](https://clickhouse.com/docs/integrations/clickpipes/kafka/best-practices)). The other sizes scale it by vCPU and round down. No throughput is published for Pub/Sub ClickPipes.
 - Pick a size above the peak rate and run two or more replicas. Two or more give an availability-zone-distributed setup ([docs](https://clickhouse.com/docs/integrations/clickpipes/pubsub/overview#scaling)); ClickPipes spreads the managed subscription's messages across the replicas.
 - Total throughput also sets how fast the pipe catches up after a stop: with rate F, total throughput C and a stop of T hours, catching up takes T × F ÷ (C − F) hours. The managed subscription keeps messages 7 days, so leave room to catch up well within that.
-- The default (one XS replica) handles about 7 MB/s: enough for a trial, possibly not for production. In production, set `pipe_replicas` and related variables in [setup](setup.md), and the size in [setup in the browser](setup-console.md), to this estimate.
+- The default (one XS replica) handles about 7 MB/s: enough for a trial, possibly not for production. In production, set `pipe_replicas` and related variables in [setup](03-setup.md), and the size in [setup in the browser](04-setup-console.md), to this estimate.
 
 **Service**
 

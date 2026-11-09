@@ -1,4 +1,4 @@
--- Optional L2 example. Build an L2 only when L1 cannot meet a requirement (docs/en/design.md, "When to build an L2").
+-- Optional L2 example. Build an L2 only when L1 cannot meet a requirement (docs/en/01-design.md, "When to build an L2").
 -- Promote one log type into a typed table for clean dashboards: GKE upgrade notifications
 -- (log id container.googleapis.com/notifications). The generic L1 keeps them too; this table
 -- only adds typed columns. Register it as its own ClickStack log source.

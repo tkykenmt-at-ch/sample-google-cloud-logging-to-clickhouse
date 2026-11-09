@@ -32,7 +32,7 @@ WHERE (/* the current WHERE of gcl_noise_1m_v1_mv */) AND _publish_time >= toDat
 -- Step 2: before T2, create the new ClickPipe on gcl.gcl_landing_v2 starting at latest.
 --   Terraform: add a second clickhouse_clickpipe resource (copy of clickhouse_clickpipe.gcl with another
 --   name and destination.table = "gcl_landing_v2") and apply.
---   clickhousectl: docs/en/hands-on.md, part 3 (create the ClickPipe), with --table gcl_landing_v2.
+--   clickhousectl: docs/en/05-hands-on.md, part 3 (create the ClickPipe), with --table gcl_landing_v2.
 
 -- Step 3: cap every old MV at T2 (before T2), with its full current body.
 ALTER TABLE gcl.{{L1_MV}} MODIFY QUERY
@@ -52,4 +52,4 @@ WHERE _publish_time < toDateTime64('{{T2}}', 3, 'UTC')
   -- Rows dropped on purpose by a noise rule are not stuck: same condition as verify/checks.sql 2.
   AND JSONExtractString(_raw_message, 'protoPayload', 'methodName') != 'io.k8s.coordination.v1.leases.update';   -- must be 0
 -- Point verify/checks.sql and the runbooks at gcl_landing_v2 from now on.
--- Delete the old pipe only after the rollback window (see docs/en/findings.md, "Creating the pipe and its destination").
+-- Delete the old pipe only after the rollback window (see docs/en/08-findings.md, "Creating the pipe and its destination").

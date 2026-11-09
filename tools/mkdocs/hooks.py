@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[2]
 REPO = "https://github.com/tkykenmt-at-ch/sample-google-cloud-logging-to-clickhouse"
 READMES = {"en/index.md": "README.md", "ja/index.md": "README.ja.md"}
 
-# English | [日本語](../ja/setup.md), [English](../en/setup.md) | 日本語, and the README forms with "·".
+# English | [日本語](../ja/03-setup.md), [English](../en/03-setup.md) | 日本語, and the README forms with "·".
 LANG_LINE = re.compile(r"^(English [|·] \[日本語\]\([^)]*\)|\[English\]\([^)]*\) [|·] 日本語)\n+", re.M)
 ALERT = re.compile(r"^> \[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]\n((?:>.*\n?)+)", re.M)
 ALERT_KIND = {"NOTE": "note", "TIP": "tip", "IMPORTANT": "info", "WARNING": "warning", "CAUTION": "danger"}

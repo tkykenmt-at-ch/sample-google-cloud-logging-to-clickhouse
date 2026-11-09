@@ -1,6 +1,6 @@
 # 検証記録
 
-[English](../en/findings.md) | 日本語
+[English](../en/08-findings.md) | 日本語
 
 2026-10-01〜05 に ClickHouse Cloud と Google Cloud の検証環境で確かめた結果です。
 Pub/Sub ClickPipes は Private Preview の段階にあり、ClickHouse Cloud も自動でバージョンが更新されるため、ここに記載した挙動は将来変わる可能性があります。
@@ -133,7 +133,7 @@ p99 の約 5 秒は、パイプが約 5 秒ごとに INSERT することによ�
 
 ## 既存パイプラインの移行（実ログ）
 
-自社 GCP プロジェクトの Cloud Logging を取り込んでいた既存のパイプライン（着地テーブルは `_raw_message` だけ、MV で監査ログと GKE ログに分割）を、`sql/runbooks/06_migrate_legacy_pipeline.sql` の手順（[運用](operations.md) の付録 A5）でこの構成へ移しました。
+自社 GCP プロジェクトの Cloud Logging を取り込んでいた既存のパイプライン（着地テーブルは `_raw_message` だけ、MV で監査ログと GKE ログに分割）を、`sql/runbooks/06_migrate_legacy_pipeline.sql` の手順（[運用](06-operations.md) の付録 A5）でこの構成へ移しました。
 流量は約 18 msg/s（1 日約 155 万件、96% が k8s.io の Lease 更新の監査ログ）です。
 
 | 項目 | 結果 |
@@ -232,7 +232,7 @@ Cloud Monitoring の `logging.googleapis.com/exports/log_entry_count`（シン�
 
 ## 継続運用中の L1 の移行（Blue/Green、2026-10-02）
 
-旧スキーマ（属性の値のインデックス、本文は単語単位の区切り）の L1 を、新しいスキーマ（`キー=値` のインデックス、本文は ngrams(2)、Map は with_buckets）の `gcl_logs_v2` へ、`sql/runbooks/03_blue_green.sql` の手順（[運用](operations.md) の付録 A3）で移しました。
+旧スキーマ（属性の値のインデックス、本文は単語単位の区切り）の L1 を、新しいスキーマ（`キー=値` のインデックス、本文は ngrams(2)、Map は with_buckets）の `gcl_logs_v2` へ、`sql/runbooks/03_blue_green.sql` の手順（[運用](06-operations.md) の付録 A3）で移しました。
 
 - 境界時刻 T の 5 分前に、T 以降に公開されたデータだけを書き込む MV を作った。
   v2 の最初の行の公開時刻は T の 0.348 秒後で、T 以降の MessageId の数は v1 と一致した（1,813 件）。
@@ -288,7 +288,7 @@ GKE のアップグレード通知の表（ノードプール、版、件数、�
 ## 構築手順（Terraform、gcloud と clickhousectl、2026-10-02）
 
 検証用のプロジェクトとサービスを使い、両方の手順でリソースの作成から削除までを実行しました。
-`cli/deploy.sh` と `cli/destroy.sh` はその後リポジトリから外し、同じコマンドを [ハンズオン](hands-on.md) の第 3 部に移しました。
+`cli/deploy.sh` と `cli/destroy.sh` はその後リポジトリから外し、同じコマンドを [ハンズオン](05-hands-on.md) の第 3 部に移しました。
 
 | 手順 | 結果 |
 |---|---|
@@ -300,7 +300,7 @@ GKE のアップグレード通知の表（ノードプール、版、件数、�
 
 ## 東京リージョンの新しいサービスへの構築（Terraform、2026-10-05）
 
-GCP の東京リージョン（`asia-northeast1`）に `clickhousectl cloud service create` で新しいサービス（26.6、メモリ 8 GB）を作り、何もない状態から [導入](setup.md) の手順で構築しました。
+GCP の東京リージョン（`asia-northeast1`）に `clickhousectl cloud service create` で新しいサービス（26.6、メモリ 8 GB）を作り、何もない状態から [導入](03-setup.md) の手順で構築しました。
 トピックの保存先は `topic_storage_regions = ["asia-northeast1"]` で東京に限定し、シンクのフィルタはどの実ログにも一致しない値にして、合成ログだけを公開しました。
 
 | 手順 | 結果 |
@@ -319,7 +319,7 @@ GCP の東京リージョン（`asia-northeast1`）に `clickhousectl cloud serv
 
 ## ブラウザでの構築（2026-10-05）
 
-[ブラウザで導入する](setup-console.md) の手順を、Google Cloud Console と ClickHouse Cloud Console の画面だけで、検証用のプロジェクトと東京リージョンの新しいサービス（Mini、26.6）に対して実行しました。
+[ブラウザで導入する](04-setup-console.md) の手順を、Google Cloud Console と ClickHouse Cloud Console の画面だけで、検証用のプロジェクトと東京リージョンの新しいサービス（Mini、26.6）に対して実行しました。
 シンクのフィルタは、画面の画像を撮った後で実ログに一致しない値に替え、合成ログだけを公開しました。
 
 | 手順 | 結果 |
@@ -335,7 +335,7 @@ GCP の東京リージョン（`asia-northeast1`）に `clickhousectl cloud serv
 
 ## 既存ログのバックフィル（2026-10-05）
 
-[運用](operations.md) の「既存ログのバックフィル」と `sql/runbooks/10_backfill_from_gcs.sql` の手順を、検証用のプロジェクトの `_Default` バケットの 3 時間分（2026-10-04 00:00〜03:00 UTC）で試しました。
+[運用](06-operations.md) の「既存ログのバックフィル」と `sql/runbooks/10_backfill_from_gcs.sql` の手順を、検証用のプロジェクトの `_Default` バケットの 3 時間分（2026-10-04 00:00〜03:00 UTC）で試しました。
 取り込み先は、パイプのつながっていない別のデータベースです。
 同じ時間帯のログはシンク経由で本線の L1 にも入っているので、行単位で突き合わせました。
 
@@ -361,7 +361,7 @@ GCP の東京リージョン（`asia-northeast1`）に `clickhousectl cloud serv
 
 ## 最終確認（2026-10-06）
 
-最終レビューの修正の後、[導入](setup.md) の Terraform の手順とハンズオン第 2 部を、東京リージョンのサービスと `topic_storage_regions = ["asia-northeast1"]` で通しました。
+最終レビューの修正の後、[導入](03-setup.md) の Terraform の手順とハンズオン第 2 部を、東京リージョンのサービスと `topic_storage_regions = ["asia-northeast1"]` で通しました。
 
 | 手順 | 結果 |
 |---|---|
@@ -390,7 +390,7 @@ ClickPipes の Workload Identity（Private Preview）を、組織で有効にし
 | 鍵の方式に戻す（v3.37.0） | 1 回の適用で、サービスアカウントと鍵とロールの付与を作り、パイプを鍵の方式に戻してから、Workload Identity 用の付与を消した |
 | Terraform で鍵から切り替える（v3.37.0、`create_before_destroy` あり） | Workload Identity 用の付与、パイプの更新、古い鍵とロールの付与とサービスアカウントの削除の順になった（約 25 秒）。3 回の切り替えを通して、送った 4,800 件は L0 で欠損 0。再配信の重複が L0 と L1 に 400 件あり、L1 の `MessageId` の種類の数は 4,800 で一致した。`terraform destroy` で 8 リソースを消し、何も残らなかった |
 | 検証環境の本線のパイプ | PATCH で切り替え、5 分間 Running が続くのを確かめた。約 22 分後に古い鍵とロールの付与を削除し、取り込みは続いた |
-| ブラウザで作る（[ブラウザでの構築](setup-console.md) の 5 と 7） | 「Authentication method」で「Workload identity」を選ぶと、ロールを付ける相手のサービスアカウントが画面に出た。IAM の「Grant access」でカスタムロールを付けると、接続の検証とトピックの一覧が通った。作成から約 30 秒で Running になり、作成後に送った合成ログ 3,800 件は L0 と L1 で欠損 0 |
+| ブラウザで作る（[ブラウザでの構築](04-setup-console.md) の 5 と 7） | 「Authentication method」で「Workload identity」を選ぶと、ロールを付ける相手のサービスアカウントが画面に出た。IAM の「Grant access」でカスタムロールを付けると、接続の検証とトピックの一覧が通った。作成から約 30 秒で Running になり、作成後に送った合成ログ 3,800 件は L0 と L1 で欠損 0 |
 | `clickhousectl` | 0.4.2（2026-09-03）は鍵ファイルが必須で、Workload Identity のパイプは作れない。対応はリリース前の変更に入っている |
 
 ## 未検証の項目

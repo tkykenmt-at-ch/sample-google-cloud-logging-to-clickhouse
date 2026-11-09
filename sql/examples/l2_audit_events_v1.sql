@@ -1,5 +1,5 @@
 -- Optional L2 example used in the hands-on. Build an L2 only when L1 cannot meet a requirement
--- (docs/en/design.md, "When to build an L2").
+-- (docs/en/01-design.md, "When to build an L2").
 -- Requirement this one answers: "who did what" queries filter on the operator, but the L1 sort key
 -- (5-minute bucket, ServiceName, Timestamp) cannot skip by operator. The typed table sorts by operator.
 -- It reads L0 (not L1), so it can be rebuilt from L0 like L1.

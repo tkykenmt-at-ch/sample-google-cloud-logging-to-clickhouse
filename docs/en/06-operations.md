@@ -1,13 +1,13 @@
 # Operations
 
-English | [日本語](../ja/operations.md)
+English | [日本語](../ja/06-operations.md)
 
 Most operational work is adding noise rules, creating and reworking L2 tables, and adding L3 tables.
 L1 fixes only the envelope as columns and takes the payload as attributes, so new kinds of logs rarely require rebuilding L0 or L1.
 Rebuilding and switching L0 and L1 is for recovery or redesign only, so those procedures are in the appendix.
 
 SQL templates for each procedure are in `sql/runbooks/`.
-Numbers and conditions are in the [findings](findings.md).
+Numbers and conditions are in the [findings](08-findings.md).
 
 ## Daily checks
 
@@ -17,12 +17,12 @@ Check the following regularly with `verify/checks.sql`.
 | Check | `verify/checks.sql` | Abnormal when | Action |
 |---|---|---|---|
 | Loss anywhere on the path | Check 9 and Cloud Monitoring `logging.googleapis.com/exports/log_entry_count` | Differs from the sink's export count by more than 1% (normally under 0.1%) | Check the pipe state, the Pub/Sub backlog, and sink export errors |
-| Stuck batches | Check 2 | Greater than 0 | "Detecting and recovering MV failures" in [troubleshooting](troubleshooting.md) |
-| Failed inserts | Check 6 | One or more | "Detecting and recovering MV failures" in [troubleshooting](troubleshooting.md) |
+| Stuck batches | Check 2 | Greater than 0 | "Detecting and recovering MV failures" in [troubleshooting](07-troubleshooting.md) |
+| Failed inserts | Check 6 | One or more | "Detecting and recovering MV failures" in [troubleshooting](07-troubleshooting.md) |
 | Messages ClickPipes could not insert | Check 10 (the ClickPipes error table `gcl_landing_v1_clickpipes_error`, kept 7 days) | One or more (L0 takes only the virtual columns, so normally 0) | Read `error_msg` for the cause. The whole message stays in `record_value`; its `logName` gives the project (environment) |
-| Ingest latency | Check 1 | p99 above 10 s and growing | "Ingest falls behind" in [troubleshooting](troubleshooting.md) |
+| Ingest latency | Check 1 | p99 above 10 s and growing | "Ingest falls behind" in [troubleshooting](07-troubleshooting.md) |
 | Duplicates | Check 3 | Increased after a failure or pause | Deduplicate in queries, or rebuild the day with appendix A2 |
-| Pipe state | `clickhousectl cloud clickpipe get <service id> <pipe id>` (pipe ID from `terraform output clickpipe_id`) | Failed | "Detecting and recovering MV failures" in [troubleshooting](troubleshooting.md) |
+| Pipe state | `clickhousectl cloud clickpipe get <service id> <pipe id>` (pipe ID from `terraform output clickpipe_id`) | Failed | "Detecting and recovering MV failures" in [troubleshooting](07-troubleshooting.md) |
 
 ```bash
 export CH_SERVICE_ID=<service id>
@@ -43,7 +43,7 @@ ClickPipes notifications (email, console, Slack) are sent when a pipe has failur
 | Drop high-volume, low-value logs | Noise rules and normalization for every log | `sql/runbooks/07_add_noise_rule.sql` | No |
 | Give typed columns to logs with requirements L1 cannot meet; rework an existing L2 | Creating and reworking an L2 | `sql/runbooks/08_add_or_rework_l2.sql`, examples in `sql/examples/` | No |
 | Fast long-range trends; keep only aggregates for longer | Adding an L3 | `sql/runbooks/09_add_l3.sql`, `09_add_l3_backfill.sql` | No |
-| An MV throws; the pipe is Failed | "Detecting and recovering MV failures" in [troubleshooting](troubleshooting.md) | `sql/runbooks/05_mv_failure.sql` | ― |
+| An MV throws; the pipe is Failed | "Detecting and recovering MV failures" in [troubleshooting](07-troubleshooting.md) | `sql/runbooks/05_mv_failure.sql` | ― |
 | Extract another column | Appendix A1 | `sql/runbooks/01_add_column.sql` | No |
 | Fix the parser, including past days | Appendix A2 | `sql/runbooks/02_rebuild_partition.sql` | No |
 | Change types, ORDER BY, partitioning, or engine | Appendix A3 | `sql/runbooks/03_blue_green.sql` | No |
@@ -79,7 +79,7 @@ The template for adding a rule is `sql/runbooks/07_add_noise_rule.sql`.
 
 - L0 keeps the raw rows for its retention, so a rule can be reverted by rebuilding from L0.
 - Counts remain, so a stop in the updates (a controller going down) is visible in a chart.
-- Pub/Sub and ClickPipes volume does not go down. For high-volume logs that also stay in Cloud Logging (such as `_Required`) and that you never search in ClickHouse, an exclusion filter on the sink is an option; then no counts remain either. In the test environment, Lease updates were 59% of the bytes sent to Pub/Sub, but only about $3 per GKE cluster per month ([Findings](findings.md), "Bytes that drive Pub/Sub cost").
+- Pub/Sub and ClickPipes volume does not go down. For high-volume logs that also stay in Cloud Logging (such as `_Required`) and that you never search in ClickHouse, an exclusion filter on the sink is an option; then no counts remain either. In the test environment, Lease updates were 59% of the bytes sent to Pub/Sub, but only about $3 per GKE cluster per month ([Findings](08-findings.md), "Bytes that drive Pub/Sub cost").
 
 Switching a rule uses a `_publish_time` boundary T like the other procedures.
 The noise MV counts only rows with `_publish_time >= T`, and MV1 drops only rows with `_publish_time >= T`.
@@ -159,14 +159,14 @@ The feature must be enabled for the organization, and both the ClickHouse Cloud 
 No service account or key is created; `terraform output clickpipes_service_account` shows the identity that got the role.
 
 **For a running pipe**, only the authentication changes; the pipe is not recreated.
-In testing, the same pipe and managed subscription stayed Running and ingestion did not stop ([Findings](findings.md), "Workload identity").
+In testing, the same pipe and managed subscription stayed Running and ingestion did not stop ([Findings](08-findings.md), "Workload identity").
 
 **Under Terraform**, set `clickpipes_auth = "workload_identity"` in `terraform.tfvars` and apply (ClickHouse Terraform provider v3.37.0 or later).
 The apply grants the role to the workload identity first, then updates the pipe, then removes the old key, binding and service account.
 Those three old resources carry `create_before_destroy`, so the key stays until the pipe has switched.
 
 - With provider v3.36.0 or earlier, the pipe update fails with `format is immutable for Pub/Sub sources` ([#745](https://github.com/ClickHouse/terraform-provider-clickhouse/issues/745), fixed in v3.37.0). `terraform/terraform.tf` requires v3.37.0 or later; run `terraform init -upgrade` before applying.
-- Deployments created with this repository before 2026-10-08 have no `create_before_destroy` in their state. The old key and binding are then removed first, about 20 seconds before the pipe is updated. In testing the pipe stayed Running until the update, then went through Provisioning back to Running; messages in between stayed in the managed subscription with no loss ([Findings](findings.md), "Workload identity").
+- Deployments created with this repository before 2026-10-08 have no `create_before_destroy` in their state. The old key and binding are then removed first, about 20 seconds before the pipe is updated. In testing the pipe stayed Running until the update, then went through Provisioning back to Running; messages in between stayed in the managed subscription with no loss ([Findings](08-findings.md), "Workload identity").
 
 **Without Terraform**, change only the authentication through the API:
 
@@ -207,7 +207,7 @@ To stop that storage, run both in parallel first, then switch.
 
 1. Parallel run: add the Pub/Sub sink and keep storing in `_Default`.
 2. Reconcile: compare the sink's export count with what ClickHouse ingested (loss on the path in "Daily checks"), and confirm that day-to-day searches work in ClickStack.
-3. Inventory: list the features that use logs stored in `_Default`, and decide for each whether it moves to ClickStack or whether those logs stay in `_Default` ([Design](design.md), "What changes when you stop storing logs in the _Default bucket").
+3. Inventory: list the features that use logs stored in `_Default`, and decide for each whether it moves to ClickStack or whether those logs stay in `_Default` ([Design](01-design.md), "What changes when you stop storing logs in the _Default bucket").
 4. Switch: add an exclusion filter to the `_Default` sink or disable it, so new logs no longer go there. Removing the filter reverts it.
 
 This repository's Terraform does not manage the `_Default` sink.
@@ -234,7 +234,7 @@ gcloud logging copy _Default storage.googleapis.com/<bucket> --location=global \
 gcloud logging operations describe <operation id> --location=global --project=<project>   # state, logEntriesCopiedCount
 ```
 
-Results in testing ([Findings](findings.md), "Backfilling existing logs"):
+Results in testing ([Findings](08-findings.md), "Backfilling existing logs"):
 
 - The copied files held one LogEntry JSON per line, the same shape the sink publishes, so MV1 parses them as is.
 - Copying 3 hours (151k entries, 116 MB) took 76 minutes, 10 of them queued. Copies are slow: split the period and start them early.

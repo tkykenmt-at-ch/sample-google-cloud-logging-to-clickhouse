@@ -1,10 +1,10 @@
 # ブラウザで導入する
 
-[English](../en/setup-console.md) | 日本語
+[English](../en/04-setup-console.md) | 日本語
 
-Terraform を使えない環境向けに、[導入](setup.md) と同じ構成を Google Cloud Console と ClickHouse Cloud Console の画面だけで作る手順です。
+Terraform を使えない環境向けに、[導入](03-setup.md) と同じ構成を Google Cloud Console と ClickHouse Cloud Console の画面だけで作る手順です。
 Terraform の代わりの手順なので、両方は実行しません。
-先に [導入](setup.md) の「始める前に」を読みます。
+先に [導入](03-setup.md) の「始める前に」を読みます。
 画面は 2026-10-05 時点のものです。
 
 作るものは導入と同じです。
@@ -128,7 +128,7 @@ Workload Identity は Private Preview で、組織で有効にしてもらう必
 
 このサービスアカウントは ClickHouse Cloud のサービスごとに決まり、自分のプロジェクトには作られません。
 サービスアカウントと鍵の作成（次の「鍵ファイルを使う場合」）は飛ばし、6 へ進みます。
-検証では、ロールを付けた直後に 7 の接続の検証が通りました（[検証記録](findings.md) の「Workload Identity」）。
+検証では、ロールを付けた直後に 7 の接続の検証が通りました（[検証記録](08-findings.md) の「Workload Identity」）。
 
 ### 鍵ファイルを使う場合
 
@@ -200,13 +200,13 @@ JSON の各項目（`insertId` など）は対応付けないままにします�
 **Details and settings**：Permissions で「Only destination」を選び、「Create ClickPipe」を押します。
 
 レプリカは既定で最小の大きさ（XS）が 1 つで、処理できるのは約 7 MB/s です。
-本番のログを流す前に、[計画](planning.md) の「大きさの見積もり方」で決めた大きさと数（2 つ以上）に、Settings → Advanced Settings → Scaling で変えます。
+本番のログを流す前に、[計画](02-planning.md) の「大きさの見積もり方」で決めた大きさと数（2 つ以上）に、Settings → Advanced Settings → Scaling で変えます。
 
 ![権限](../images/console/06g_clickpipe_details.png)
 
 画面に「No access to Materialized Views」という警告が出ますが、この構成では問題ありません。
 MV は `SQL SECURITY DEFINER` 付きで、MV の定義者（`default`）の権限で L1 と集計テーブルに書き込むためです。
-検証では、パイプのユーザーの権限は L0 とエラーテーブルだけでしたが、L1 と集計テーブルに欠損なく入りました（[検証記録](findings.md) の「ブラウザでの構築」）。
+検証では、パイプのユーザーの権限は L0 とエラーテーブルだけでしたが、L1 と集計テーブルに欠損なく入りました（[検証記録](08-findings.md) の「ブラウザでの構築」）。
 
 数分で状態が Running になります。
 パイプは管理サブスクリプション（`clickpipes-<パイプ ID>`）を作ります（保持 7 日、ack 期限 60 秒、順序付けあり）。
@@ -254,7 +254,7 @@ SELECT
 ```
 
 L0 の行数は、L1 とノイズの件数の合計とほぼ一致します（L1 に入る前の数秒分の差はあります）。
-定期的な確認は、`verify/checks.sql` の各クエリを SQL コンソールに貼って実行します（[運用](operations.md) の「日常の確認」）。
+定期的な確認は、`verify/checks.sql` の各クエリを SQL コンソールに貼って実行します（[運用](06-operations.md) の「日常の確認」）。
 
 ## 削除する
 

@@ -185,3 +185,22 @@ FROM gcl.gcl_logs_v1
 WHERE Timestamp > now() - INTERVAL 8 DAY AND InsertedAt > now() - INTERVAL 10 MINUTE
 GROUP BY minute
 ORDER BY minute;
+
+-- 17. Stored size per day, to estimate storage at full retention (docs: design, "Estimating cost from PoC
+--     measurements"). L1 is partitioned by Timestamp and L0 by publish date, so a day's logs count on that day even
+--     when they were ingested late. Average complete days over a week with weekdays and weekends; today is partial
+--     and its parts are not merged yet. Storage is billed on on_disk_gb, which includes skip indexes (the text index
+--     on Body is a large share of L1); compressed_gb and ratio cover column data only.
+SELECT
+    table,
+    partition AS day,
+    sum(rows) AS rows,
+    round(sum(bytes_on_disk) / 1e9, 1) AS on_disk_gb,
+    round(sum(data_compressed_bytes) / 1e9, 1) AS compressed_gb,
+    round(sum(data_uncompressed_bytes) / 1e9, 1) AS uncompressed_gb,
+    round(sum(data_uncompressed_bytes) / sum(data_compressed_bytes), 1) AS ratio
+FROM system.parts
+WHERE database = 'gcl' AND active
+  AND toDate(partition) >= today() - 8
+GROUP BY table, day
+ORDER BY table, day;

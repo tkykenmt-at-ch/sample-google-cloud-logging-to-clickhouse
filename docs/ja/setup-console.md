@@ -200,7 +200,7 @@ JSON の各項目（`insertId` など）は対応付けないままにします�
 **Details and settings**：Permissions で「Only destination」を選び、「Create ClickPipe」を押します。
 
 レプリカは既定で最小の大きさ（XS）が 1 つで、処理できるのは約 7 MB/s です。
-本番のログを流す前に、[設計](design.md) の「大きさの見積もり方」で決めた大きさと数（2 つ以上）に、Settings → Advanced Settings → Scaling で変えます。
+本番のログを流す前に、[計画](planning.md) の「大きさの見積もり方」で決めた大きさと数（2 つ以上）に、Settings → Advanced Settings → Scaling で変えます。
 
 ![権限](../images/console/06g_clickpipe_details.png)
 

@@ -78,12 +78,13 @@ The same documents are also on the [docs site](https://tkykenmt-at-ch.github.io/
 
 | Document | Contents |
 |---|---|
-| [Design](docs/en/design.md) | Key points, layer roles, when to build an L2, cost estimation, size estimation, decisions for your environment, design details |
+| [Design](docs/en/design.md) | Key points, layer roles, when to build an L2, design details |
+| [Planning](docs/en/planning.md) | Decisions for your environment, size estimation, cost estimation, monthly cost from PoC measurements |
 | [Setup](docs/en/setup.md) | Cautions before you start, deploying with Terraform, changing settings, removal |
 | [Setup in the browser](docs/en/setup-console.md) | Without Terraform: the same configuration built only in the Google Cloud and ClickHouse Cloud consoles, with screenshots |
 | [Hands-on](docs/en/hands-on.md) | Part 1 runs the SQL on a local `clickhouse local`; part 2 deploys to real services with Terraform and searches in ClickStack; part 3 builds the same pieces one at a time with gcloud and clickhousectl |
-| [Troubleshooting](docs/en/troubleshooting.md) | Narrowing down ingest delay, inserts spanning too many partitions, and part counts from the symptom |
-| [Operations](docs/en/operations.md) | Daily checks, noise rules, L2 and L3, MV failures, operations to avoid, retention, switching production logs, rebuilding L0 and L1 (appendix) |
+| [Troubleshooting](docs/en/troubleshooting.md) | Narrowing down ingest delay, MV failures, inserts spanning too many partitions, and part counts from the symptom |
+| [Operations](docs/en/operations.md) | Daily checks, monitoring and alerts, noise rules, L2 and L3, operations to avoid, retention, switching production logs, rebuilding L0 and L1 (appendix) |
 | [Findings](docs/en/findings.md) | Observed behavior and measurements |
 
 <details>

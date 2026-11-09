@@ -78,12 +78,13 @@ gcloud と clickhousectl で 1 つずつ作りながら仕組みを確かめる�
 
 | ドキュメント | 内容 |
 |---|---|
-| [設計](docs/ja/design.md) | 要点、層の役割、L2 を作る判断、費用の見積もり方、大きさの見積もり方、利用者の環境で決めること、設計の詳細 |
+| [設計](docs/ja/design.md) | 要点、層の役割、L2 を作る判断、設計の詳細 |
+| [計画](docs/ja/planning.md) | 利用者の環境で決めること、大きさの見積もり方、費用の見積もり方、PoC の実測から月額を出す方法 |
 | [導入](docs/ja/setup.md) | 始める前の注意、Terraform での構築、作成後の設定の変更、削除 |
 | [ブラウザで導入する](docs/ja/setup-console.md) | Terraform を使えない環境向けに、同じ構成を Google Cloud と ClickHouse Cloud の画面だけで作る（画面の画像つき） |
 | [ハンズオン](docs/ja/hands-on.md) | ローカルの `clickhouse local` だけで SQL を動かす第 1 部、Terraform で実環境に構築して ClickStack で検索する第 2 部、同じものを gcloud と clickhousectl で 1 つずつ作る第 3 部 |
-| [トラブルシューティング](docs/ja/troubleshooting.md) | 取り込みの遅れ、1 回の INSERT がまたぐパーティション、パーツの数を、症状から切り分ける手順 |
-| [運用](docs/ja/operations.md) | 日常の確認、ノイズの除去、L2 と L3、MV のエラーへの対処、避ける操作、保持期間の変更、本番ログへの切り替え、L0・L1 の作り直し（付録） |
+| [トラブルシューティング](docs/ja/troubleshooting.md) | 取り込みの遅れ、MV のエラー、1 回の INSERT がまたぐパーティション、パーツの数を、症状から切り分ける手順 |
+| [運用](docs/ja/operations.md) | 日常の確認、監視とアラート、ノイズの除去、L2 と L3、避ける操作、保持期間の変更、本番ログへの切り替え、L0・L1 の作り直し（付録） |
 | [検証記録](docs/ja/findings.md) | 実機で確かめた挙動と数値 |
 
 <details>

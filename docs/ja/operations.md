@@ -17,17 +17,25 @@ L0 と L1 の作り直しと切り替えは、復旧や構成の見直しのと�
 | 確認項目 | `verify/checks.sql` | 異常の目安 | 対処 |
 |---|---|---|---|
 | 経路全体の欠損 | 9 番と Cloud Monitoring の `logging.googleapis.com/exports/log_entry_count` | シンクの送出件数との差が 1% を超える（平常時は 0.1% 未満） | パイプの状態、Pub/Sub の滞留、シンクの送出エラーを確かめる |
-| 処理が停滞したバッチ | 2 番 | 0 より大きい | 「MV のエラーの検知と復旧」 |
-| 失敗した INSERT | 6 番 | 1 件以上 | 「MV のエラーの検知と復旧」 |
+| 処理が停滞したバッチ | 2 番 | 0 より大きい | [トラブルシューティング](troubleshooting.md) の「MV のエラーの検知と復旧」 |
+| 失敗した INSERT | 6 番 | 1 件以上 | [トラブルシューティング](troubleshooting.md) の「MV のエラーの検知と復旧」 |
 | 取り込めなかったメッセージ | 10 番（ClickPipes のエラーテーブル `gcl_landing_v1_clickpipes_error`、保持 7 日） | 1 件以上（L0 には仮想列だけを入れるので、平常時は 0 件） | `error_msg` で原因を確かめる。メッセージ全体が `record_value` に残り、環境（プロジェクト）は `logName` から分かる |
 | 取り込みの遅れ | 1 番 | p99 が 10 秒を超えて増え続ける | [トラブルシューティング](troubleshooting.md) の「取り込みが遅れる」 |
 | 重複 | 3 番 | 障害や一時停止の後に増えた | 検索側で除くか、付録 A2 で該当日を作り直す |
-| パイプの状態 | `clickhousectl cloud clickpipe get <service id> <pipe id>`（パイプの ID は `terraform output clickpipe_id`） | Failed | 「MV のエラーの検知と復旧」 |
+| パイプの状態 | `clickhousectl cloud clickpipe get <service id> <pipe id>`（パイプの ID は `terraform output clickpipe_id`） | Failed | [トラブルシューティング](troubleshooting.md) の「MV のエラーの検知と復旧」 |
 
 ```bash
 export CH_SERVICE_ID=<service id>
 python3 tools/chq.py verify/checks.sql
 ```
+
+## 監視とアラート
+
+ClickPipes の通知（メール、コンソール、Slack）は、パイプの失敗や問題のときに届きます（[通知](https://clickhouse.com/docs/products/cloud/features/monitoring/notifications)）。
+処理が追いつかないだけではパイプは Running のままなので、遅れは次のどちらかで監視します。
+
+- Cloud Monitoring で、管理サブスクリプションの `oldest_unacked_message_age_by_region` にアラートを設定する
+- Prometheus のエンドポイントから `ClickPipes_Latency` を取り込み、利用中の監視ツールでアラートを設定する
 
 ## 手順の選び方
 
@@ -36,7 +44,7 @@ python3 tools/chq.py verify/checks.sql
 | 大量に発生し、個別に確認する必要性が低いログを外す | ノイズの除去と、ログの種類に依存しない整形 | `sql/runbooks/07_add_noise_rule.sql` | 不要 |
 | L1 で満たせない要件のあるログを型付きの列にする。既存の L2 を作り替える | L2 の新規作成と作り替え | `sql/runbooks/08_add_or_rework_l2.sql`、例 `sql/examples/` | 不要 |
 | 長い期間の推移を速く見る。集計だけ長く残す | L3 の追加 | `sql/runbooks/09_add_l3.sql`、`09_add_l3_backfill.sql` | 不要 |
-| MV が例外を出している。パイプが Failed になった | MV のエラーの検知と復旧 | `sql/runbooks/05_mv_failure.sql` | ― |
+| MV が例外を出している。パイプが Failed になった | [トラブルシューティング](troubleshooting.md) の「MV のエラーの検知と復旧」 | `sql/runbooks/05_mv_failure.sql` | ― |
 | 取り出す列を増やす | 付録 A1 | `sql/runbooks/01_add_column.sql` | 不要 |
 | 解析の誤りを直し、過去日も直す | 付録 A2 | `sql/runbooks/02_rebuild_partition.sql` | 不要 |
 | 型、ORDER BY、パーティション、エンジンを変える | 付録 A3 | `sql/runbooks/03_blue_green.sql` | 不要 |
@@ -139,29 +147,6 @@ L2 は L0 から作るので、遡れるのは L0 の保持期間の分だけで
 MV は INSERT のときしか動かないので、過去分は同じ GROUP BY の `INSERT ... SELECT` でバックフィルします。
 元の表でパーティション操作（付録の手順）をしたときは、L3 の同じ範囲も作り直します。
 手順のひな型は `sql/runbooks/09_add_l3.sql`（集計テーブルと MV）と `sql/runbooks/09_add_l3_backfill.sql`（T を過ぎてから実行するバックフィルと照合）です。
-
-## MV のエラーの検知と復旧
-
-MV が例外を出したときの挙動は、次のとおりでした。
-
-1. 失敗したバッチは L0 には書かれ、L1 には届かない。
-2. パイプは同じバッチを 10 秒、30 秒、70 秒、その後は 2 分ごとに再試行する。
-3. ほかのバッチは並行して処理され、パイプの状態は短時間 Degraded になった後 Running に戻る。
-   エラーテーブルには行が書き込まれない。
-4. `MODIFY QUERY` で MV を直すと、次の再試行で L1 に届き、欠損も重複も出ない。
-
-4 は、L0 でブロックの重複が排除されたうえで、下流の MV にはブロックがもう一度渡されるためです。
-これは設定 `deduplicate_blocks_in_dependent_materialized_views` の既定値 1 によります（[設定の説明](https://clickhouse.com/docs/reference/settings/session-settings/other#deduplicate_blocks_in_dependent_materialized_views)）。
-
-ただし検証では、最初の失敗から約 60 分たつと、パイプは Failed になって取り込みを止めました。
-その場合も、MV を直してから `clickpipe start` で再開すれば欠損は出ませんでしたが、処理が停滞したバッチの一部が L1 に二重に入りました。
-再開後は `verify/checks.sql` の 3 番で `MessageId` の重複を確かめ、検索側で除くか、該当範囲を付録 A2 で作り直します。
-
-パイプの状態表示は、Failed になるまで処理の停滞を示さないので、監視は L0 と L1 の差と、`system.query_log` の失敗した INSERT で行います。
-SQL は `sql/runbooks/05_mv_failure.sql` にあります。
-
-MV は DROP して作り直さず、`MODIFY QUERY` で直します。
-DROP と CREATE の間に INSERT されたブロックは、MV を通らずに L0 にだけ残ります。
 
 ## 避ける操作
 
@@ -296,14 +281,6 @@ gcloud logging operations describe <operation id> --location=global --project=<p
   そのため、バックフィルした範囲の作り直しに L0 は使えない。
   確認が済むまで Cloud Storage のファイルを残し、作り直すときはそこから入れ直す。
 - 取り込んだ行の `MessageId` は空、`PublishTime` は `receiveTimestamp` になる（付録 A5 と同じ扱い）。
-
-## リソースの削除
-
-- 止めたパイプの管理サブスクリプションは残り、メッセージが蓄積し続けます。
-  使わないパイプは削除します。
-- パイプを削除しても、宛先テーブルとエラーテーブルは残ります。
-  不要な場合は別途削除します。
-- 構成全体の削除は [導入](setup.md) の「リソースを削除する」にあります。
 
 ## 付録：L0 と L1 の作り直しと切り替え（復旧用）
 

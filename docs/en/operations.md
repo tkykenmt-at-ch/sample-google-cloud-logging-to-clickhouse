@@ -17,17 +17,24 @@ Check the following regularly with `verify/checks.sql`.
 | Check | `verify/checks.sql` | Abnormal when | Action |
 |---|---|---|---|
 | Loss anywhere on the path | Check 9 and Cloud Monitoring `logging.googleapis.com/exports/log_entry_count` | Differs from the sink's export count by more than 1% (normally under 0.1%) | Check the pipe state, the Pub/Sub backlog, and sink export errors |
-| Stuck batches | Check 2 | Greater than 0 | "Detecting and recovering MV failures" |
-| Failed inserts | Check 6 | One or more | "Detecting and recovering MV failures" |
+| Stuck batches | Check 2 | Greater than 0 | "Detecting and recovering MV failures" in [troubleshooting](troubleshooting.md) |
+| Failed inserts | Check 6 | One or more | "Detecting and recovering MV failures" in [troubleshooting](troubleshooting.md) |
 | Messages ClickPipes could not insert | Check 10 (the ClickPipes error table `gcl_landing_v1_clickpipes_error`, kept 7 days) | One or more (L0 takes only the virtual columns, so normally 0) | Read `error_msg` for the cause. The whole message stays in `record_value`; its `logName` gives the project (environment) |
 | Ingest latency | Check 1 | p99 above 10 s and growing | "Ingest falls behind" in [troubleshooting](troubleshooting.md) |
 | Duplicates | Check 3 | Increased after a failure or pause | Deduplicate in queries, or rebuild the day with appendix A2 |
-| Pipe state | `clickhousectl cloud clickpipe get <service id> <pipe id>` (pipe ID from `terraform output clickpipe_id`) | Failed | "Detecting and recovering MV failures" |
+| Pipe state | `clickhousectl cloud clickpipe get <service id> <pipe id>` (pipe ID from `terraform output clickpipe_id`) | Failed | "Detecting and recovering MV failures" in [troubleshooting](troubleshooting.md) |
 
 ```bash
 export CH_SERVICE_ID=<service id>
 python3 tools/chq.py verify/checks.sql
 ```
+
+## Monitoring and alerts
+
+ClickPipes notifications (email, console, Slack) are sent when a pipe has failures or issues ([notifications](https://clickhouse.com/docs/products/cloud/features/monitoring/notifications)). A pipe that only falls behind stays Running, so monitor the delay with one of these:
+
+- An alert in Cloud Monitoring on the managed subscription's `oldest_unacked_message_age_by_region`
+- `ClickPipes_Latency` scraped from the Prometheus endpoint, with an alert in your monitoring tool
 
 ## Choosing a procedure
 
@@ -36,7 +43,7 @@ python3 tools/chq.py verify/checks.sql
 | Drop high-volume, low-value logs | Noise rules and normalization for every log | `sql/runbooks/07_add_noise_rule.sql` | No |
 | Give typed columns to logs with requirements L1 cannot meet; rework an existing L2 | Creating and reworking an L2 | `sql/runbooks/08_add_or_rework_l2.sql`, examples in `sql/examples/` | No |
 | Fast long-range trends; keep only aggregates for longer | Adding an L3 | `sql/runbooks/09_add_l3.sql`, `09_add_l3_backfill.sql` | No |
-| An MV throws; the pipe is Failed | Detecting and recovering MV failures | `sql/runbooks/05_mv_failure.sql` | ― |
+| An MV throws; the pipe is Failed | "Detecting and recovering MV failures" in [troubleshooting](troubleshooting.md) | `sql/runbooks/05_mv_failure.sql` | ― |
 | Extract another column | Appendix A1 | `sql/runbooks/01_add_column.sql` | No |
 | Fix the parser, including past days | Appendix A2 | `sql/runbooks/02_rebuild_partition.sql` | No |
 | Change types, ORDER BY, partitioning, or engine | Appendix A3 | `sql/runbooks/03_blue_green.sql` | No |
@@ -128,28 +135,6 @@ The per-minute counts in `sql/40_rollup_1m_v1.sql` are one.
 4. Point the ClickStack tiles (SQL tiles) at the L3.
 
 MVs fire only on INSERT, so the past must be filled with `INSERT ... SELECT`. After partition operations on the source (the appendix procedures), rebuild the same range of the L3 too. The templates are `sql/runbooks/09_add_l3.sql` (table and MV) and `sql/runbooks/09_add_l3_backfill.sql` (fill the past and compare, after T).
-
-## Detecting and recovering MV failures
-
-When an MV threw an exception, the behavior was:
-
-1. The failing batch was written to L0 but never reached L1.
-2. The pipe retried the same batch after 10 s, 30 s, 70 s, then every 2 minutes.
-3. Other batches kept flowing; the pipe state was Degraded briefly and then back to Running. The error table stayed empty.
-4. After fixing the MV with `MODIFY QUERY`, the next retry delivered the batch to L1 with no loss and no duplicates.
-
-Point 4 holds because the block is deduplicated in L0 and still passed again to the dependent MVs.
-This comes from the default value 1 of the setting `deduplicate_blocks_in_dependent_materialized_views` ([setting](https://clickhouse.com/docs/reference/settings/session-settings/other#deduplicate_blocks_in_dependent_materialized_views)).
-
-In testing, however, the pipe went Failed and stopped ingesting about 60 minutes after the first failure.
-Fixing the MV and restarting with `clickpipe start` lost nothing, but part of the stuck batch was written to L1 twice.
-After a restart, check `MessageId` duplicates with check 3 in `verify/checks.sql`, and deduplicate in queries or rebuild the range with appendix A2.
-
-The pipe state does not show a stuck batch until Failed, so monitor the L0 to L1 gap and failed inserts in `system.query_log`.
-The SQL is in `sql/runbooks/05_mv_failure.sql`.
-
-Fix MVs with `MODIFY QUERY`; never drop and recreate them.
-Blocks inserted between DROP and CREATE skip the MV and stay only in L0.
 
 ## Operations to avoid
 
@@ -261,12 +246,6 @@ Cautions:
 - **Around the sink's start**, copied entries overlap with what the sink delivered. For that range only, skip LogEntry identities already in L0 (Step 4 of the runbook). L0, not L1, because noise rows never reach L1. Without it, a local test duplicated 319 rows in L1 and grew the noise counts by 81.
 - **Logs older than the L0 TTL** are written to L0 and the MVs run, but the TTL drop removes those parts right after (Cloud 26.6: 0.1 s after the insert; clickhouse local 26.7: within 3 s; the MV target got every row). L0 therefore cannot rebuild the backfilled range: keep the Cloud Storage files until the backfill is verified and re-insert from them instead.
 - Backfilled rows have an empty `MessageId` and `PublishTime` = `receiveTimestamp` (as in appendix A5).
-
-## Cleanup
-
-- A stopped pipe keeps its managed subscription, which keeps accumulating messages. Delete pipes you no longer use.
-- Deleting a pipe leaves the destination table and the error table. Drop them separately if not needed.
-- Removing the whole deployment is described in "Removing the resources" in [Setup](setup.md).
 
 ## Appendix: rebuilding and switching L0 and L1 (recovery)
 

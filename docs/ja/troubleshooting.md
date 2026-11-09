@@ -4,18 +4,17 @@
 
 取り込みの不調を、症状から原因と対処まで切り分ける手順です。
 クエリは `verify/checks.sql` の番号で示します（実行は `python3 tools/chq.py verify/checks.sql`）。
-日常の確認の項目と目安は [運用](operations.md) の「日常の確認」にあります。
+日常の確認の項目と目安、遅れの監視は [運用](operations.md) の「日常の確認」と「監視とアラート」にあります。
 
 | 症状 | 見る節 |
 |---|---|
 | 新しいログが出てこない、遅れて出る | 「取り込みが遅れる」 |
-| パイプが Degraded や Failed になる、L1 に届かない行がある | [運用](operations.md) の「MV のエラーの検知と復旧」 |
+| パイプが Degraded や Failed になる、L1 に届かない行がある | 「MV のエラーの検知と復旧」 |
 | INSERT が `TOO_MANY_PARTITIONS` で失敗する | 「1 回の INSERT がまたぐパーティションが多すぎる」 |
 | パーツが多すぎるように見える | 「パーツの数」 |
 | シンクの送出件数と ClickHouse の行数が合わない | [運用](operations.md) の「日常の確認」の経路全体の欠損 |
 
 ## 取り込みが遅れる
-
 ### 1. 遅れを測る
 
 いちばん手早いのは、ClickHouse Cloud Console でパイプを開き、Metrics タブの「Latency (s)」のグラフを見ることです。
@@ -27,7 +26,6 @@ ClickHouse 側からは、16 番で、直近 10 分に L1 に入った行につ�
 
 1 番は公開時刻で行を選ぶので、滞留している間は行がほとんど出ません。
 1 番の行数が普段より少ないことも、遅れの兆候です。
-
 ### 2. 滞留を確かめる
 
 Cloud Monitoring で、管理サブスクリプション `clickpipes-<パイプ ID>` の次の指標を見ます（[Pub/Sub のモニタリング](https://cloud.google.com/pubsub/docs/monitoring)）。
@@ -41,7 +39,6 @@ ClickHouse 側からは 11 番で確かめます。
 直近 1 時間に L0 へ書き込まれた行を、公開日ごとに数えます。
 L0 は公開日でパーティションを分けているので、追いついていれば今日の日付だけが出ます。
 前の日付に多くの行が入っていれば、過去に公開されたメッセージを今も処理しています。
-
 ### 3. パイプとサービスのどちらが遅いかを見分ける
 
 12 番で、パイプの INSERT の回数と所要時間を 10 分ごとに見ます。
@@ -55,12 +52,11 @@ L0 は公開日でパーティションを分けているので、追いつい�
 | ある | 上限に近い行数で、間隔が短い | 間隔よりずっと短い | パイプは上限まで書いている。レプリカを増やすか大きくする |
 | ある | ― | 間隔に近い、または失敗がある（6 番） | サービス側が遅い |
 | ない | 約 5 秒ごと | 短い | 正常。滞留がない限り、間隔が 5 秒でも問題ない |
-
 ### 4. 対処する
 
 **パイプ側が遅い場合**
 
-[設計](design.md) の「大きさの見積もり方」で流量からレプリカの大きさと数を決め、変更します。
+[計画](planning.md) の「大きさの見積もり方」で流量からレプリカの大きさと数を決め、変更します。
 レプリカは 2 つ以上にします。
 
 - ブラウザ：ClickHouse Cloud Console でパイプを開き、Settings → Advanced Settings → Scaling
@@ -70,30 +66,43 @@ L0 は公開日でパーティションを分けているので、追いつい�
 
 **サービス側が遅い場合**
 
-- 自動スケールの上限が、取り込みと検索に要る vCPU を下回っていないかを確かめます（[設計](design.md) の「大きさの見積もり方」）。
+- 自動スケールの上限が、取り込みと検索に要る vCPU を下回っていないかを確かめます（[計画](planning.md) の「大きさの見積もり方」）。
   パイプを大きくすると、滞留を取り戻している間はサービスに届く量も増えます。
-- 6 番で失敗した INSERT があれば、[運用](operations.md) の「MV のエラーの検知と復旧」に従います。
-
+- 6 番で失敗した INSERT があれば、「MV のエラーの検知と復旧」に従います。
 ### 5. 追いついたことを確かめる
 
 - 11 番で、今日の日付だけが出る。
 - 16 番の遅れが数秒に戻る。
 - Pub/Sub の 2 つの指標が下がり、横ばいになる。
-
-### 遅れの監視
-
-ClickPipes の通知（メール、コンソール、Slack）は、パイプの失敗や問題のときに届きます（[通知](https://clickhouse.com/docs/products/cloud/features/monitoring/notifications)）。
-処理が追いつかないだけではパイプは Running のままなので、遅れは次のどちらかで監視します。
-
-- Cloud Monitoring で、管理サブスクリプションの `oldest_unacked_message_age_by_region` にアラートを設定する
-- Prometheus のエンドポイントから `ClickPipes_Latency` を取り込み、利用中の監視ツールでアラートを設定する
-
 ### 滞留が長く続いた場合の注意
 
 - 管理サブスクリプションの保持は 7 日です（[公式資料](https://clickhouse.com/docs/integrations/clickpipes/pubsub/overview)）。
   7 日を過ぎても処理されないメッセージは破棄され、トピックに保持がなければ Pub/Sub からは取り戻せません。
   Cloud Logging のログバケットに残っていれば、[運用](operations.md) の「既存ログのバックフィル」の手順で入れられます。
 - 公開から 1 日を超えた未処理のメッセージには、保管料がかかります（[保管料](https://cloud.google.com/pubsub/pricing#storage_costs)）。
+
+## MV のエラーの検知と復旧
+
+MV が例外を出したときの挙動は、次のとおりでした。
+
+1. 失敗したバッチは L0 には書かれ、L1 には届かない。
+2. パイプは同じバッチを 10 秒、30 秒、70 秒、その後は 2 分ごとに再試行する。
+3. ほかのバッチは並行して処理され、パイプの状態は短時間 Degraded になった後 Running に戻る。
+   エラーテーブルには行が書き込まれない。
+4. `MODIFY QUERY` で MV を直すと、次の再試行で L1 に届き、欠損も重複も出ない。
+
+4 は、L0 でブロックの重複が排除されたうえで、下流の MV にはブロックがもう一度渡されるためです。
+これは設定 `deduplicate_blocks_in_dependent_materialized_views` の既定値 1 によります（[設定の説明](https://clickhouse.com/docs/reference/settings/session-settings/other#deduplicate_blocks_in_dependent_materialized_views)）。
+
+ただし検証では、最初の失敗から約 60 分たつと、パイプは Failed になって取り込みを止めました。
+その場合も、MV を直してから `clickpipe start` で再開すれば欠損は出ませんでしたが、処理が停滞したバッチの一部が L1 に二重に入りました。
+再開後は `verify/checks.sql` の 3 番で `MessageId` の重複を確かめ、検索側で除くか、該当範囲を [運用](operations.md) の付録 A2 で作り直します。
+
+パイプの状態表示は、Failed になるまで処理の停滞を示さないので、監視は L0 と L1 の差と、`system.query_log` の失敗した INSERT で行います。
+SQL は `sql/runbooks/05_mv_failure.sql` にあります。
+
+MV は DROP して作り直さず、`MODIFY QUERY` で直します。
+DROP と CREATE の間に INSERT されたブロックは、MV を通らずに L0 にだけ残ります。
 
 ## 1 回の INSERT がまたぐパーティションが多すぎる
 

@@ -7,13 +7,12 @@ How to narrow down an ingest problem from the symptom to its cause and fix. Quer
 | Symptom | Section |
 |---|---|
 | New logs do not show up, or show up late | "Ingest falls behind" |
-| The pipe goes Degraded or Failed; rows do not reach L1 | "Detecting and recovering MV failures" in [operations](operations.md) |
+| The pipe goes Degraded or Failed; rows do not reach L1 | "Detecting and recovering MV failures" |
 | Inserts fail with `TOO_MANY_PARTITIONS` | "One insert spans too many partitions" |
 | The part count looks too high | "Part counts" |
 | The sink's export count and the rows in ClickHouse disagree | Loss on the path, in "Daily checks" in [operations](operations.md) |
 
 ## Ingest falls behind
-
 ### 1. Measure the delay
 
 The quickest way is the "Latency (s)" chart on the pipe's Metrics tab in the ClickHouse Cloud Console. The same value is available as `ClickPipes_Latency` on the Prometheus endpoint ([ClickPipes monitoring](https://clickhouse.com/docs/integrations/clickpipes/monitoring)).
@@ -21,7 +20,6 @@ The quickest way is the "Latency (s)" chart on the pipe's Metrics tab in the Cli
 From ClickHouse, check 16 shows, for the rows that reached L1 in the last 10 minutes, the delay from Pub/Sub publish. The pipe inserts at least every 5 seconds, so the delay is a few seconds when it keeps up. If you see minutes, or a value that keeps growing, go on.
 
 Check 1 selects rows by publish time, so during a backlog it returns few rows. Fewer rows than usual in check 1 are also a sign of delay.
-
 ### 2. Confirm a backlog
 
 In Cloud Monitoring, look at these metrics for the managed subscription `clickpipes-<pipe id>` ([Pub/Sub monitoring](https://cloud.google.com/pubsub/docs/monitoring)):
@@ -32,7 +30,6 @@ In Cloud Monitoring, look at these metrics for the managed subscription `clickpi
 If both keep growing, the pipe is not keeping up with the rate.
 
 From ClickHouse, use check 11. It counts the rows written to L0 in the last hour by publish date. L0 is partitioned by publish date, so only today's date appears when the pipe keeps up. Many rows under earlier dates mean the pipe is still working through messages published in the past.
-
 ### 3. Tell the pipe from the service
 
 Check 12 shows the number and duration of pipe inserts per 10 minutes. Check 13 shows the rows each insert wrote to L0.
@@ -45,12 +42,11 @@ The pipe closes a batch and inserts it at 100,000 rows, at 32 MB per GB of repli
 | Yes | Near the size limits, short intervals | Much shorter than the interval | The pipe writes as fast as it can: add or enlarge replicas |
 | Yes | ― | Close to the interval, or failures (check 6) | The service is the limit |
 | No | About every 5 s | Short | Normal. A 5 s interval is fine as long as nothing backs up |
-
 ### 4. Fix it
 
 **When the pipe is the limit**
 
-Choose the replica size and number from the ingest rate ("Estimating size" in [design](design.md)) and change them. Run two or more replicas.
+Choose the replica size and number from the ingest rate ("Estimating size" in [planning](planning.md)) and change them. Run two or more replicas.
 
 - In the browser: open the pipe in the ClickHouse Cloud Console, Settings → Advanced Settings → Scaling
 - Terraform: `pipe_replicas`, `pipe_replica_cpu_millicores`, `pipe_replica_memory_gb` ("Changing settings after creation" in [setup](setup.md))
@@ -59,26 +55,39 @@ With rate F, total throughput C and a delay of T, catching up takes T × F ÷ (C
 
 **When the service is the limit**
 
-- Check that the autoscaling maximum is not below the vCPU needed for ingest and queries ("Estimating size" in [design](design.md)). A larger pipe also delivers more to the service while it works off a backlog.
-- If check 6 shows failed inserts, follow "Detecting and recovering MV failures" in [operations](operations.md).
-
+- Check that the autoscaling maximum is not below the vCPU needed for ingest and queries ("Estimating size" in [planning](planning.md)). A larger pipe also delivers more to the service while it works off a backlog.
+- If check 6 shows failed inserts, follow "Detecting and recovering MV failures".
 ### 5. Confirm it caught up
 
 - Check 11 shows only today's date.
 - The delay in check 16 is back to a few seconds.
 - Both Pub/Sub metrics fall and level off.
-
-### Monitoring the delay
-
-ClickPipes notifications (email, console, Slack) are sent when a pipe has failures or issues ([notifications](https://clickhouse.com/docs/products/cloud/features/monitoring/notifications)). A pipe that only falls behind stays Running, so monitor the delay with one of these:
-
-- An alert in Cloud Monitoring on the managed subscription's `oldest_unacked_message_age_by_region`
-- `ClickPipes_Latency` scraped from the Prometheus endpoint, with an alert in your monitoring tool
-
 ### When the backlog lasted long
 
 - The managed subscription keeps messages 7 days ([docs](https://clickhouse.com/docs/integrations/clickpipes/pubsub/overview)). Messages not processed within 7 days are discarded, and without topic retention they cannot be recovered from Pub/Sub. If they are still in a Cloud Logging log bucket, load them with "Backfilling existing logs" in [operations](operations.md).
 - Unprocessed messages older than one day incur storage charges ([storage costs](https://cloud.google.com/pubsub/pricing#storage_costs)).
+
+## Detecting and recovering MV failures
+
+When an MV threw an exception, the behavior was:
+
+1. The failing batch was written to L0 but never reached L1.
+2. The pipe retried the same batch after 10 s, 30 s, 70 s, then every 2 minutes.
+3. Other batches kept flowing; the pipe state was Degraded briefly and then back to Running. The error table stayed empty.
+4. After fixing the MV with `MODIFY QUERY`, the next retry delivered the batch to L1 with no loss and no duplicates.
+
+Point 4 holds because the block is deduplicated in L0 and still passed again to the dependent MVs.
+This comes from the default value 1 of the setting `deduplicate_blocks_in_dependent_materialized_views` ([setting](https://clickhouse.com/docs/reference/settings/session-settings/other#deduplicate_blocks_in_dependent_materialized_views)).
+
+In testing, however, the pipe went Failed and stopped ingesting about 60 minutes after the first failure.
+Fixing the MV and restarting with `clickpipe start` lost nothing, but part of the stuck batch was written to L1 twice.
+After a restart, check `MessageId` duplicates with check 3 in `verify/checks.sql`, and deduplicate in queries or rebuild the range with appendix A2 in [operations](operations.md).
+
+The pipe state does not show a stuck batch until Failed, so monitor the L0 to L1 gap and failed inserts in `system.query_log`.
+The SQL is in `sql/runbooks/05_mv_failure.sql`.
+
+Fix MVs with `MODIFY QUERY`; never drop and recreate them.
+Blocks inserted between DROP and CREATE skip the MV and stay only in L0.
 
 ## One insert spans too many partitions
 

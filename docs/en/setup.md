@@ -88,7 +88,7 @@ All variables and defaults are in `terraform/variables.tf`, and invalid values a
 | `landing_ttl_days` | 7 | Ingest delay + switch and backfill + verification and rollback, plus a margin |
 | `logs_ttl_days` | 400 | Log retention requirement |
 | `pipe_seek_type` | `latest` | Start position of a new managed subscription. Leave as is: the topic keeps no messages |
-| `pipe_replicas` etc. | 1 replica, smallest size (about 7 MB/s) | A trial value. In production, use the size and number from "Estimating size" in [design](design.md) |
+| `pipe_replicas` etc. | 1 replica, smallest size (about 7 MB/s) | A trial value. In production, use the size and number from "Estimating size" in [planning](planning.md) |
 | `clickstack_connection_id` | None | To create the ClickStack source and dashboard (step 4) |
 
 ### 3. Check the plan, then apply
@@ -158,3 +158,8 @@ python3 tools/chq.py -q "DROP DATABASE IF EXISTS gcl SYNC"
 - When the ClickPipe is deleted, ClickPipes deletes its managed subscription asynchronously. `terraform destroy` waits for that (`tools/wait_subscriptions_gone.py`, up to 5 minutes) before removing the key and the role binding. Without the wait, the managed subscription was left behind, attached to the deleted topic (`_deleted-topic_`). If it is still there after 5 minutes, destroy warns and continues; run the printed `gcloud pubsub subscriptions delete` command to remove it.
 - The database `gcl` created by `sql/` is not managed by Terraform; remove it with `DROP DATABASE`.
 - A deleted custom role stays soft-deleted and can be restored within 7 days. Its ID cannot be reused until it is permanently deleted ([Deleting a custom role](https://cloud.google.com/iam/docs/creating-custom-roles#deleting-custom-role)). To try again right away, change `clickpipes_role_id`.
+
+### Removing only a pipe
+
+- A stopped pipe keeps its managed subscription, which keeps accumulating messages. Delete pipes you no longer use.
+- Deleting a pipe leaves the destination table and the error table. Drop them separately if not needed.

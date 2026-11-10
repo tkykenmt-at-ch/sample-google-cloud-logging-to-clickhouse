@@ -204,3 +204,53 @@ WHERE database = 'gcl' AND active
   AND toDate(partition) >= today() - 8
 GROUP BY table, day
 ORDER BY table, day;
+
+-- 18. CPU hours per day by kind of work, all replicas (docs: 03-cost). Pipe inserts include parsing in the MVs;
+--     merges are split by table. system.query_log and system.part_log keep about 7 days on ClickHouse Cloud.
+SELECT day, kind, round(sum(cpu) / 3.6e9, 2) AS cpu_hours
+FROM (
+    SELECT event_date AS day,
+        multiIf(user LIKE 'clickpipe:%' AND query_kind = 'Insert', 'pipe inserts', query_kind = 'Select', 'queries',
+                'other statements') AS kind,
+        ProfileEvents['OSCPUVirtualTimeMicroseconds'] AS cpu
+    FROM clusterAllReplicas('default', system.query_log)
+    WHERE type IN ('QueryFinish', 'ExceptionWhileProcessing') AND event_date >= today() - 7 AND event_date < today()
+    UNION ALL
+    SELECT event_date, if(database = 'gcl', concat('merges ', table), 'merges of system tables'),
+        ProfileEvents['OSCPUVirtualTimeMicroseconds']
+    FROM clusterAllReplicas('default', system.part_log)
+    WHERE event_type = 'MergeParts' AND event_date >= today() - 7 AND event_date < today())
+GROUP BY day, kind
+ORDER BY day, cpu_hours DESC;
+
+-- 19. CPU cores and memory per replica by hour (docs: 03-cost). Compare the average with the p99 and the
+--     replica size: the service is sized for the peaks, not the average.
+SELECT
+    toStartOfHour(event_time) AS hour,
+    count(DISTINCT hostname) AS replicas,
+    round(avg(ProfileEvent_OSCPUVirtualTimeMicroseconds) / 1e6, 2) AS avg_cores,
+    round(quantile(0.99)(ProfileEvent_OSCPUVirtualTimeMicroseconds) / 1e6, 2) AS p99_cores,
+    round(max(CurrentMetric_MemoryTracking) / pow(2, 30), 1) AS max_memory_gib
+FROM clusterAllReplicas('default', system.metric_log)
+WHERE event_time >= now() - INTERVAL 1 DAY
+GROUP BY hour
+ORDER BY hour;
+
+-- 20. Size of each skip index in L1, whole table (docs: 03-cost). The text index on Body is usually the largest.
+SELECT name, type_full, round(data_compressed_bytes / 1e9, 2) AS on_disk_gb
+FROM system.data_skipping_indices
+WHERE database = 'gcl' AND table = 'gcl_logs_v1'
+ORDER BY data_compressed_bytes DESC;
+
+-- 21. Representative queries (docs: 03-cost, search compute). Run each with SETTINGS log_comment = 'rep:<name>',
+--     then read the CPU time and the data read per run. Multiply by the expected runs per day.
+SELECT
+    log_comment AS query,
+    count() AS runs,
+    round(avg(query_duration_ms) / 1000, 2) AS avg_seconds,
+    round(avg(ProfileEvents['OSCPUVirtualTimeMicroseconds']) / 1e6, 2) AS avg_cpu_seconds,
+    formatReadableSize(avg(read_bytes)) AS avg_read
+FROM clusterAllReplicas('default', system.query_log)
+WHERE type = 'QueryFinish' AND log_comment LIKE 'rep:%' AND event_date >= today() - 7
+GROUP BY query
+ORDER BY query;

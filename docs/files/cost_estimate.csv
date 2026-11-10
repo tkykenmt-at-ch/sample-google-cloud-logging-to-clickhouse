@@ -1,19 +1,20 @@
 項目,値,単位,入れ方
 L1 の保持日数,400,日,設計の値
 L0 の保持日数,7,日,設計の値
-L1 の 1 日あたりのディスク上の量,,GB,checks.sql の 17 番（gcl_logs_v1 の on_disk_gb）の 1 週間の平均。L2 や集計の表を作ったら足す
-L0 の 1 日あたりのディスク上の量,,GB,checks.sql の 17 番（gcl_landing_v1 の on_disk_gb）の 1 週間の平均
-ClickPipes が読んだ量（1 日あたり）,,GB,パイプの Metrics タブ、または Prometheus の ClickPipes_FetchedBytes_Total の 1 日の増分
-Pub/Sub の公開の計上量（1 日あたり）,,GiB,Cloud Monitoring の pubsub.googleapis.com/topic/byte_cost
-Pub/Sub の配信の計上量（1 日あたり）,,GiB,Cloud Monitoring の pubsub.googleapis.com/subscription/byte_cost を、トピックを読む全部のサブスクリプションで足す（ack と ack 期限の延長も含まれる）
-Cloud Logging の課金対象の量（1 か月）,,GiB,請求の SKU「Log Storage cost」の使用量、または logging.googleapis.com/billing/bytes_ingested
-サービスの計算資源（1 日あたり）,,USD,Console の Usage breakdown の Compute（今のプランの定価）
-今のストレージ（1 日あたり）,,USD,Usage breakdown の Storage（同じ日）
-今のバックアップ（1 日あたり）,,USD,Usage breakdown の Backups（同じ日）
+L1 の 1 日あたりのディスク上の量,,GB,tools/cost_inputs.py の B4（checks.sql の 17 番の gcl_logs_v1 の on_disk_gb の 1 週間の平均）。L2 や集計の表を作ったら足す
+L0 の 1 日あたりのディスク上の量,,GB,tools/cost_inputs.py の B5（17 番の gcl_landing_v1 の on_disk_gb）
+ClickPipes が読んだ量（1 日あたり）,,GB,tools/cost_inputs.py の B6（L0 の非圧縮の量）。パイプの Metrics タブの値でもよい
+Pub/Sub の公開の計上量（1 日あたり）,,GiB,tools/cost_inputs.py の B7（Cloud Monitoring の pubsub.googleapis.com/topic/byte_cost）
+Pub/Sub の配信の計上量（1 日あたり）,,GiB,tools/cost_inputs.py の B8（subscription/byte_cost を、トピックを読む全部のサブスクリプションで足す）
+Cloud Logging の課金対象の量（1 か月）,,GiB,tools/cost_inputs.py の B9（logging.googleapis.com/billing/bytes_ingested）、または請求の SKU「Log Storage cost」の使用量
+サービスの計算資源（1 日あたり）,,USD,tools/cost_inputs.py の B10（ClickHouse Cloud の使用量の Compute、今のプランの定価）
+検索で足す計算資源（1 日あたり）,0,ユニット・時間,"代表クエリを測ったら入れる：checks.sql の 21 番の CPU 秒 × 1 日の実行回数 ÷ 3,600 ÷ 2（1 ユニットは 2 vCPU）"
+今のストレージ（1 日あたり）,,USD,tools/cost_inputs.py の B12（使用量の Storage）
+今のバックアップ（1 日あたり）,,USD,tools/cost_inputs.py の B13（使用量の Backups）
 今のプランの計算資源の単価,,USD/ユニット・時間,料金ページ（クラウド、リージョン、プランを選ぶ）
 使うプランの計算資源の単価,,USD/ユニット・時間,料金ページ
 ストレージの単価,,USD/TB・月,料金ページ
-ClickPipes のレプリカの合計ユニット,1,ユニット,L は 0.5、XL は 1（L × 2 なら 1）
+ClickPipes のレプリカの合計ユニット,,ユニット,tools/cost_inputs.py の B17（レプリカのメモリ 8 GiB で 1 ユニット。L は 0.5、L × 2 なら 1）
 ClickPipes の計算資源の単価,0.20,USD/ユニット・時間,ClickPipes の料金のページ（Pub/Sub の料金は ClickHouse に確認する）
 ClickPipes の取り込みデータの単価,0.04,USD/GB,同上
 Pub/Sub の転送の単価,40,USD/TiB,Pub/Sub の料金のページ
@@ -22,11 +23,12 @@ Cloud Logging の保管の単価（30 日を超えた分）,0.01,USD/GiB・月,�
 1 か月の日数,30.42,日,
 ,,,
 月額,,,
-サービスの計算資源,=B10*B14/B13*B22,USD,今の使用量を使うプランの単価に置き換える（検索の負荷は含まない）
-ストレージ,=(B4*B2+B5*B3)/1000*B15,USD,保持日数分たまった状態
-バックアップ,=B12/B11*B26,USD,今のストレージとバックアップの比を、保持日数分たまったストレージに掛ける
-ClickPipes,=B16*B17*24*B22+B6*B22*B18,USD,計算資源と取り込みデータ
-Pub/Sub,=(B7+B8)*B22/1024*B19,USD,公開と配信
-ClickHouse に移した場合の合計,=SUM(B25:B29),USD,
-Cloud Logging に保管する場合,=B9*B20+B9*(B2-30)/B22*B21,USD,同じ保持日数の定常状態（プロジェクトごとの無料枠 50 GiB/月は含めない）
-差額,=B31-B30,USD,
+サービスの計算資源,=(B10*B15/B14+B11*B15)*B23,USD,今の使用量を使うプランの単価に置き換え、検索の分を足す
+ストレージ,=(B4*B2+B5*B3)/1000*B16,USD,保持日数分たまった状態
+バックアップ,=B13/B12*B27,USD,今のストレージとバックアップの比を、保持日数分たまったストレージに掛ける
+ClickPipes,=B17*B18*24*B23+B6*B23*B19,USD,計算資源と取り込みデータ
+Pub/Sub,=(B7+B8)*B23/1024*B20,USD,公開と配信
+ClickHouse に移した場合の合計,=SUM(B26:B30),USD,保持日数分たまった定常状態
+Cloud Logging に保管する場合,=B9*B21+B9*(B2-30)/B23*B22,USD,同じ保持日数の定常状態（プロジェクトごとの無料枠 50 GiB/月は含めない）
+差額,=B32-B31,USD,
+ClickHouse に移した場合の合計（1 年目の平均）,"=B26+B29+B30+(B27+B28)*((B4*B2*IF(B2>=365,365/(2*B2),1-B2/730)+B5*B3)/(B4*B2+B5*B3))",USD,空の状態から始めた 1 年目。ストレージとバックアップは保持日数分たまるまで増える

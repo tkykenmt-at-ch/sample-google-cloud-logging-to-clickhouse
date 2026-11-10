@@ -80,7 +80,7 @@ gcloud と clickhousectl で 1 つずつ作りながら仕組みを確かめる�
 |---|---|
 | [設計](docs/ja/01-design.md) | 要点、層の役割、L2 を作る判断、設計の詳細 |
 | [計画](docs/ja/02-planning.md) | 利用者の環境で決めること、ClickPipes とサービスの大きさの見積もり方 |
-| [費用の見積もり](docs/ja/03-cost.md) | PoC の前の概算、PoC の実測から月額を出す方法、Cloud Logging との比較。表計算のひな形つき |
+| [費用の見積もり](docs/ja/03-cost.md) | PoC の前の概算、実測の取り方（`tools/cost_inputs.py`）と月額の出し方、計算資源の内訳、計算例。表計算のひな形つき |
 | [導入](docs/ja/04-setup.md) | 始める前の注意、Terraform での構築、作成後の設定の変更、削除 |
 | [ブラウザで導入する](docs/ja/05-setup-console.md) | Terraform を使えない環境向けに、同じ構成を Google Cloud と ClickHouse Cloud の画面だけで作る（画面の画像つき） |
 | [ハンズオン](docs/ja/06-hands-on.md) | ローカルの `clickhouse local` だけで SQL を動かす第 1 部、Terraform で実環境に構築して ClickStack で検索する第 2 部、同じものを gcloud と clickhousectl で 1 つずつ作る第 3 部 |
@@ -103,6 +103,7 @@ gcloud と clickhousectl で 1 つずつ作りながら仕組みを確かめる�
 | `docs/files/cost_estimate.csv` | 費用の見積もりの表計算のひな形（英語版は `cost_estimate.en.csv`）。ドキュメントサイトからもダウンロードできる |
 | `verify/checks.sql` | 遅延、処理が停滞したバッチ、重複、遅延到着、解析の状態、滞留、パイプの INSERT、パーツの数などの定期確認 |
 | `tools/chq.py` | SQL ファイルを 1 文ずつ `clickhousectl cloud service query` で実行する |
+| `tools/cost_inputs.py` | 費用の見積もりの入力を、Cloud Monitoring、ClickHouse Cloud の API、system テーブルから集める |
 | `tools/wait_subscriptions_gone.py` | ClickPipes が管理サブスクリプションを削除し終えるのを待つ（`terraform destroy` が使う） |
 | `mkdocs.yml`, `tools/mkdocs/` | `docs/` と README から作るドキュメントサイト。`.github/workflows/pages.yml` が GitHub Pages に公開する |
 

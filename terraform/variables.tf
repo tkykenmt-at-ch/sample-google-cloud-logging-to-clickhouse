@@ -3,7 +3,7 @@
 # --- Google Cloud ---------------------------------------------------------------------------------
 
 variable "clickpipes_auth" {
-  description = "How ClickPipes authenticates to Pub/Sub: service_account_key (a service account of this project and its JSON key) or workload_identity (Private Preview: the Google service account ClickPipes manages for the ClickHouse Cloud service, no key; must be enabled for the organization)."
+  description = "How ClickPipes authenticates to Pub/Sub: service_account_key (a service account of this project and its JSON key) or workload_identity (Beta: the Google service account ClickPipes manages for the ClickHouse Cloud service, no key; the service must support it)."
   type        = string
   default     = "service_account_key"
 

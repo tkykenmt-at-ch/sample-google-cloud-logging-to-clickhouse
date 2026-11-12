@@ -18,7 +18,7 @@ gcloud と clickhousectl で 1 つずつ作りながら仕組みを確かめる�
   量の多いノイズは、`sink_exclusions` でシンクから除外できます。
 - **サービスアカウントの鍵は Terraform の state に保存されます。**
   state は、暗号化したリモートのバックエンドに、アクセスを絞って置きます（`terraform/terraform.tf` に例があります）。
-  組織で Workload Identity（Private Preview）が有効なら、`clickpipes_auth = "workload_identity"` で鍵を使わずに読ませられます（[運用](07-operations.md) の「鍵から Workload Identity へ切り替える」）。
+  サービスが Workload Identity（Beta）に対応していれば、`clickpipes_auth = "workload_identity"` で鍵を使わずに読ませられます（[運用](07-operations.md) の「鍵から Workload Identity へ切り替える」）。
 - **ClickPipes の権限はプロジェクト全体に及びます。**
   公式の最小権限ロール（[Pub/Sub IAM permissions](https://clickhouse.com/docs/integrations/clickpipes/pubsub/auth)）は、プロジェクト内のサブスクリプションの作成、受信、削除を許します。
   範囲が広すぎる場合は、ログの送出専用のプロジェクトにトピックを置きます。
@@ -94,11 +94,11 @@ cp terraform.tfvars.example terraform.tfvars
 | `sink_exclusions` | なし | 量が多く ClickHouse で検索しないノイズを、シンクで除外する場合 |
 | `topic_storage_regions` | 制限なし | ClickHouse Cloud のサービスと同じリージョンにする（例 `["asia-northeast1"]`）。リージョンをまたぐと配信に転送料がかかる |
 | `topic_kms_key_name` | なし（Google が管理する鍵） | トピックを顧客管理の鍵（CMEK）で暗号化するとき |
-| `clickpipes_auth` | `service_account_key` | `workload_identity` にすると、ClickPipes が管理するサービスアカウントで読み、鍵を作らない（Private Preview、組織で有効にする必要がある） |
+| `clickpipes_auth` | `service_account_key` | `workload_identity` にすると、ClickPipes が管理するサービスアカウントで読み、鍵を作らない（Beta。サービスが対応している必要がある、[GCP Workload Identity](https://clickhouse.com/docs/integrations/clickpipes/security/gcp-workload-identity)） |
 | `landing_ttl_days` | 7 | 取り込みの遅延、切り替えとバックフィル、照合とロールバックに必要な期間に余裕を加える |
 | `logs_ttl_days` | 400 | ログの保持要件 |
 | `pipe_seek_type` | `latest` | 新しい管理サブスクリプションの開始位置。トピックに保持がないので、通常は変えない |
-| `pipe_replicas` など | 1 レプリカ、最小サイズ（約 7 MB/s） | 検証向けの値。本番では [計画](02-planning.md) の「大きさの見積もり方」で決めた大きさと数にする |
+| `pipe_replicas` など | 1 レプリカ、最小サイズ（推定で約 7 MB/s） | 検証向けの値。本番では [計画](02-planning.md) の「大きさの見積もり方」で決めた大きさと数にする |
 | `clickstack_connection_id` | なし | ClickStack のソースとダッシュボードを作るとき（下の 4） |
 
 ### 3. 計画を確かめてから適用する
@@ -115,7 +115,9 @@ ClickStack を使わない場合、作られるリソースは 10 個です（�
 terraform apply
 ```
 
-適用は次の順に進みます。
+適用では次のことを行います。
+ClickPipe の作成は最後です。
+1 と 2 は互いに依存しないので、順序は決まっていません。
 
 1. トピック、シンク、IAM、サービスアカウントを作る。
 2. `sql/10`〜`sql/50` を実行し、テーブルと MV を作成する（`apply_schema = false` の場合はスキップする）。

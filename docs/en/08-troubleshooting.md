@@ -2,7 +2,7 @@
 
 English | [日本語](../ja/08-troubleshooting.md)
 
-How to narrow down an ingest problem from the symptom to its cause and fix. Queries are referred to by their number in `verify/checks.sql` (run with `python3 tools/chq.py verify/checks.sql`). The routine checks and their thresholds are in "Daily checks" in [operations](07-operations.md).
+How to narrow down an ingest problem from the symptom to its cause and fix. Queries are referred to by their number in `verify/checks.sql` (run with `python3 tools/chq.py verify/checks.sql`). The routine checks and their thresholds are in "Daily checks" and "Monitoring and alerts" in [operations](07-operations.md).
 
 | Symptom | Section |
 |---|---|
@@ -91,13 +91,18 @@ Blocks inserted between DROP and CREATE skip the MV and stay only in L0.
 
 ## One insert spans too many partitions
 
-L1 is partitioned by the date of `Timestamp`. By default one block of one insert can span at most 100 partitions; beyond that the insert fails ([max_partitions_per_insert_block](https://clickhouse.com/docs/reference/settings/session-settings/max-partitions)). The MV performs the insert into L1, so the failure is handled like an MV failure, and the pipe presumably keeps retrying the same batch (inferred from the behavior with another MV exception; not tested with this one).
+L1 is partitioned by the date of `Timestamp`. By default one block of one insert can span at most 100 partitions; beyond that the insert fails ([max_partitions_per_insert_block](https://clickhouse.com/docs/reference/settings/session-settings/max-partitions)). The MV performs the insert into L1, so the failure blocks the batch like any other MV exception.
 
-Cloud Logging accepts entries with old timestamps through the API and routes them to sinks without storing them in log buckets ([Cloud Logging limits](https://cloud.google.com/logging/quotas)). The failure happens when the `Timestamp` values within one batch fall on more than 100 dates, regardless of the L1 retention (TTL).
+Cloud Logging accepts entries with old timestamps through the API and routes them to sinks without storing them in log buckets ([Cloud Logging limits](https://cloud.google.com/logging/quotas)). Without a bound, the failure happens when the `Timestamp` values within one batch fall on more than 100 dates, regardless of the L1 retention (TTL).
 
+From parser version 8, MV1 uses the LogEntry timestamp only between 30 days before and 1 day after the publish time, and the publish time otherwise. One pipe batch then touches about 32 partitions at most. The noise MV and the L2 examples apply the same rule.
+
+- On clickhouse local 26.7, one insert with timestamps on 150 dates failed with `Too many partitions for single INSERT block` under parser version 7 (rows in L0, none in L1) and reached L1 in full under version 8 (`verify/local_e2e.sh`, checks 22 and 23). Not tested with a pipe on ClickHouse Cloud.
+- Rows whose timestamp was replaced have the `entry.timestamp` attribute with the original text.
 - Check 14 shows how many L1 partitions one insert wrote.
 - Check 4 (late arrivals) reads only `Timestamp` within the last 8 days, so it does not count older timestamps.
-- If it happens, an option is to have the MV replace very old `Timestamp` values with the publish time or drop them (not tested).
+
+**Deployments created with parser version 7 or earlier.** `sql/30` and `sql/50` use `CREATE MATERIALIZED VIEW IF NOT EXISTS`, so running them again (including `terraform apply`) does not change an existing MV. Apply the new SELECT with `ALTER TABLE ... MODIFY QUERY` as in appendix A1 of [operations](07-operations.md): `gcl.gcl_logs_v1_mv` from `sql/30_logs_v1_mv.sql`, `gcl.gcl_noise_1m_v1_mv` from `sql/50_noise_rollup_v1.sql`, and any L2 MV that reads L0. Keep the noise rules you added. Check 5 shows which parser versions are writing.
 
 ## Part counts
 

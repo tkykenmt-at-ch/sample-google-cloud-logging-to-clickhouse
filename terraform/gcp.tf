@@ -10,7 +10,7 @@ locals {
   clickpipes_principal = local.workload_identity ? data.clickhouse_clickpipes_service_context.service[0].gcp_workload_identity.principal : google_service_account.clickpipes[0].email
 }
 
-# Workload identity (Private Preview): the Google service account ClickPipes manages for this ClickHouse
+# Workload identity (Beta): the Google service account ClickPipes manages for this ClickHouse
 # Cloud service. The data source waits until the identity is ready and fails if it is not supported.
 # https://clickhouse.com/docs/integrations/clickpipes/security/gcp-workload-identity
 data "clickhouse_clickpipes_service_context" "service" {

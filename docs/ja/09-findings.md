@@ -237,7 +237,7 @@ Cloud Monitoring の `logging.googleapis.com/exports/log_entry_count`（シン�
 - 境界時刻 T の 5 分前に、T 以降に公開されたデータだけを書き込む MV を作った。
   v2 の最初の行の公開時刻は T の 0.348 秒後で、T 以降の MessageId の数は v1 と一致した（1,813 件）。
 - T より前のデータは、v1 から 6 時間ごとの区間に分けてコピーし、区間ごとに件数の一致を確認した（合計 18,921,930 行）。
-  件数確認が 1 回失敗して処理が停止したが、コピー前の確認だったため、その区間をスキップして再開できた。
+  件数確認が 1 回失敗して処理が停止したが、コピー前の確認だったため、終わった区間を飛ばして再開できた。
 - 日ごとの件数、MessageId の重複数（641）、分単位の集計の合計は、v1 と v2 で一致した。
 - ClickStack のソースと、名前を固定したビューを v2 に切り替えた。
   属性の絞り込み条件には `has(LogAttributeItems, ...)` が使われ、まれな値では 333 グラニュール中 1 まで絞れた。
@@ -253,7 +253,7 @@ v7 では特定のログ形式を前提にせず、列として定義しない�
 |---|---|---|---|
 | 監査ログ以外の protoPayload（App Engine、httpRequest あり） | モジュール名 | `GET 200 /items` | `http.responseSize`、`http.protocol`、`proto.type` |
 | 同上（httpRequest なし） | モジュール名 | `[google.appengine.logging.v1.RequestLog] {...}` | `proto.type` |
-| httpRequest と message のない jsonPayload（ロードバランサ風） | リソースの種類/ログ ID | `GET 503 https://...` | `http.responseSize`、`http.cacheHit`、`http.referer` |
+| httpRequest があり message のない jsonPayload（ロードバランサ風） | リソースの種類/ログ ID | `GET 503 https://...` | `http.responseSize`、`http.cacheHit`、`http.referer` |
 | 分割されたエントリ | リソースの種類/ログ ID | textPayload | `entry.split` |
 | `otel`、`apphub`、`errorGroups`、`operation.first` を持つ | サービス名 | message | `entry.otel`、`entry.apphub`、`entry.errorGroups`、`operation.first` |
 | ペイロードなし | リソースの種類/ログ ID | `[ログ ID]` | なし |
@@ -391,7 +391,7 @@ ClickPipes の Workload Identity（Private Preview）を、組織で有効にし
 | Terraform で鍵から切り替える（v3.37.0、`create_before_destroy` あり） | Workload Identity 用の付与、パイプの更新、古い鍵とロールの付与とサービスアカウントの削除の順になった（約 25 秒）。3 回の切り替えを通して、送った 4,800 件は L0 で欠損 0。再配信の重複が L0 と L1 に 400 件あり、L1 の `MessageId` の種類の数は 4,800 で一致した。`terraform destroy` で 8 リソースを消し、何も残らなかった |
 | 検証環境の本線のパイプ | PATCH で切り替え、5 分間 Running が続くのを確かめた。約 22 分後に古い鍵とロールの付与を削除し、取り込みは続いた |
 | ブラウザで作る（[ブラウザでの構築](05-setup-console.md) の 5 と 7） | 「Authentication method」で「Workload identity」を選ぶと、ロールを付ける相手のサービスアカウントが画面に出た。IAM の「Grant access」でカスタムロールを付けると、接続の検証とトピックの一覧が通った。作成から約 30 秒で Running になり、作成後に送った合成ログ 3,800 件は L0 と L1 で欠損 0 |
-| `clickhousectl` | 0.4.2（2026-09-03）は鍵ファイルが必須で、Workload Identity のパイプは作れない。対応はリリース前の変更に入っている |
+| `clickhousectl` | 0.4.2（2026-09-03）は鍵ファイルが必須で、Workload Identity のパイプは作れない。0.5.0（2026-10-22）で対応した（本書では未検証） |
 
 ## 未検証の項目
 

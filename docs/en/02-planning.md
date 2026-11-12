@@ -74,7 +74,7 @@ Example (illustrative numbers): 10 TiB billable per month averages 10 × 1,099,5
 - The only published throughput is for Kafka ClickPipes: L at 63 MB/s for JSON (1.6 KB messages, an informal benchmark with ClickHouse not the bottleneck) ([benchmarks](https://clickhouse.com/docs/integrations/clickpipes/kafka/best-practices)). The other sizes scale it by vCPU and round down. No throughput is published for Pub/Sub ClickPipes.
 - Pick a size above the peak rate and run two or more replicas. Two or more give an availability-zone-distributed setup ([docs](https://clickhouse.com/docs/integrations/clickpipes/pubsub/overview#scaling)); ClickPipes spreads the managed subscription's messages across the replicas.
 - Total throughput also sets how fast the pipe catches up after a stop: with rate F, total throughput C and a stop of T hours, catching up takes T × F ÷ (C − F) hours. The managed subscription keeps messages 7 days, so leave room to catch up well within that.
-- The default (one XS replica) handles about 7 MB/s: enough for a trial, possibly not for production. In production, set `pipe_replicas` and related variables in [setup](04-setup.md), and the size in [setup in the browser](05-setup-console.md), to this estimate.
+- The default (one XS replica) handles an estimated 7 MB/s (scaled from the Kafka figure above): enough for a trial, possibly not for production. In production, set `pipe_replicas` and related variables in [setup](04-setup.md), and the size in [setup in the browser](05-setup-console.md), to this estimate.
 
 **Service**
 

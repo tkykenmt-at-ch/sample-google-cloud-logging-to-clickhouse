@@ -106,7 +106,7 @@ If that is too broad, put the topic in a project dedicated to log export.
 ## 5. Prepare ClickPipes authentication
 
 ClickPipes reads the topic with a service account key file (the default) or with workload identity.
-Workload identity is in Private Preview and must be enabled for your organization.
+Workload identity is in Beta. If the service does not support it, contact ClickHouse Support ([GCP workload identity](https://clickhouse.com/docs/integrations/clickpipes/security/gcp-workload-identity)).
 When it is, choose it: no key is created, so there is nothing to store or rotate.
 
 ### With workload identity
@@ -192,7 +192,7 @@ The MVs do the parsing, so L0 gets only the virtual columns.
 
 **Details and settings**: under Permissions, choose "Only destination" and press "Create ClickPipe".
 
-By default the pipe runs one replica of the smallest size (XS), which handles about 7 MB/s. Before sending production logs, change it under Settings → Advanced Settings → Scaling to the size and number (two or more) from "Estimating size" in [planning](02-planning.md).
+By default the pipe runs one replica of the smallest size (XS), which handles an estimated 7 MB/s. Before sending production logs, change it under Settings → Advanced Settings → Scaling to the size and number (two or more) from "Estimating size" in [planning](02-planning.md).
 
 ![Permissions](../images/console/06g_clickpipe_details.png)
 

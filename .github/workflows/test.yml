@@ -1,0 +1,46 @@
+name: test
+
+on:
+  push:
+    branches: [main]
+    paths: ["sql/**", "verify/**", "loadgen/**", "tools/**", "terraform/**", ".github/workflows/test.yml"]
+  pull_request:
+    paths: ["sql/**", "verify/**", "loadgen/**", "tools/**", "terraform/**", ".github/workflows/test.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  sql:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install ClickHouse
+        run: |
+          curl -fsSL https://clickhouse.com/ | sh
+          sudo install -m 0755 clickhouse /usr/local/bin/clickhouse
+      - name: Scripts
+        run: |
+          shellcheck verify/*.sh
+          python3 -m py_compile tools/*.py tools/mkdocs/*.py loadgen/*.py
+      - name: SQL end to end (clickhouse local)
+        run: |
+          verify/local_e2e.sh 20000 | tee e2e.out
+          ! grep -q FAIL e2e.out
+
+  terraform:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+      - name: Format, validate, test (no credentials)
+        working-directory: terraform
+        run: |
+          terraform fmt -check
+          terraform init -backend=false
+          terraform validate
+          terraform test

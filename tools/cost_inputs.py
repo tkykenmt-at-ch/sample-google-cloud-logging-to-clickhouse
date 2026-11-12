@@ -169,7 +169,7 @@ def main():
     parts = step("system.parts", lambda: sql(s, f"""
         SELECT table, partition AS day, sum(bytes_on_disk) / 1e9 AS on_disk_gb, sum(data_uncompressed_bytes) / 1e9 AS uncompressed_gb
         FROM system.parts WHERE database = '{db}' AND active AND table IN ('{l1}', '{l0}')
-          AND toDate(partition) BETWEEN '{first}' AND '{last}'
+          AND toDateOrNull(partition) BETWEEN '{first}' AND '{last}'
         GROUP BY table, day""")) or []
     for r in parts:
         day = dt.date.fromisoformat(r["day"])

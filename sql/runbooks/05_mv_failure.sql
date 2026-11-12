@@ -2,7 +2,8 @@
 -- Observed behaviour (Pub/Sub ClickPipe, 26.6):
 --   * the failing batch is committed to L0 but not to L1 (the INSERT fails after L0 is written);
 --   * the pipe retries the same batch with backoff (10 s, 30 s, 70 s, then every 2 min);
---   * other batches keep flowing, the pipe state stays Running, the error table stays empty;
+--   * other batches keep flowing, the pipe state stays Running (Degraded was seen once in 30-second
+--     polling), the error table stays empty;
 --   * after MODIFY QUERY fixes the MV, the next retry delivers the batch to L1 with no loss and
 --     no duplicates (L0 deduplicates the block, MVs still run: deduplicate_blocks_in_dependent_materialized_views=1).
 --   * about 60 minutes after the first failure the pipe goes Failed and stops ingesting. After fixing the MV,

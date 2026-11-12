@@ -52,7 +52,7 @@ WITH
     replaceRegexpOne(tupleElement(p, '@type'), '^.*\\.', '') AS kind,
     tupleElement(p, 'state') AS state
 SELECT
-    if(ts > toDateTime64('2000-01-01 00:00:00', 9, 'UTC'), ts, toDateTime64(_publish_time, 9, 'UTC')) AS Timestamp,
+    if(ts BETWEEN _publish_time - INTERVAL 30 DAY AND _publish_time + INTERVAL 1 DAY, ts, toDateTime64(_publish_time, 9, 'UTC')) AS Timestamp,
     _publish_time AS PublishTime,
     _message_id AS MessageId,
     'gke-upgrades' AS ServiceName,

@@ -147,8 +147,8 @@ GROUP BY ten_minutes
 ORDER BY ten_minutes;
 
 -- 14. L1 partitions written by one insert. Above 100 the insert fails (max_partitions_per_insert_block).
---     Cloud Logging routes entries with old timestamps to sinks, so this depends on the spread of Timestamp
---     within a batch, not on the L1 TTL.
+--     Cloud Logging routes entries with old timestamps to sinks. MV1 keeps Timestamp within 30 days before and
+--     1 day after the publish time, so one pipe batch stays near 32 partitions at most.
 SELECT count() AS inserts, max(partitions) AS max_partitions, round(avg(partitions), 1) AS avg_partitions
 FROM (
     SELECT query_id, uniqExact(partition_id) AS partitions
@@ -190,7 +190,8 @@ ORDER BY minute;
 --     measurements"). L1 is partitioned by Timestamp and L0 by publish date, so a day's logs count on that day even
 --     when they were ingested late. Average complete days over a week with weekdays and weekends; today is partial
 --     and its parts are not merged yet. Storage is billed on on_disk_gb, which includes skip indexes (the text index
---     on Body is a large share of L1); compressed_gb and ratio cover column data only.
+--     on Body is a large share of L1); compressed_gb and ratio cover column data only. Tables that are not
+--     partitioned by date are left out.
 SELECT
     table,
     partition AS day,
@@ -201,7 +202,7 @@ SELECT
     round(sum(data_uncompressed_bytes) / sum(data_compressed_bytes), 1) AS ratio
 FROM system.parts
 WHERE database = 'gcl' AND active
-  AND toDate(partition) >= today() - 8
+  AND toDateOrNull(partition) >= today() - 8   -- daily partitions only: other keys (a monthly L3) give NULL
 GROUP BY table, day
 ORDER BY table, day;
 

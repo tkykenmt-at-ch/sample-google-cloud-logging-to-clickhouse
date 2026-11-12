@@ -25,7 +25,8 @@ FROM
     -- (rows copied by runbook 10 have no message ID: the LogEntry identity keeps them apart)
     -- WHERE ({{COND}})
 );
-SELECT count(), uniqExact(MessageId) FROM gcl.{{L2}};   -- equal: no duplicates
+-- Equal: no duplicates. Rows copied by runbook 10 have no message ID and are left out.
+SELECT countIf(MessageId != ''), uniqExactIf(MessageId, MessageId != '') FROM gcl.{{L2}};
 
 -- Step 3: register the table as a ClickStack log source and point the tiles at it.
 

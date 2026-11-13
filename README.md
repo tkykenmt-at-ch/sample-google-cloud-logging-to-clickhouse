@@ -112,7 +112,7 @@ The same documents are also on the [docs site](https://tkykenmt-at-ch.github.io/
 ## Out of scope
 
 - Mapping Logs Explorer features to ClickStack features
-- Confirming pipe and service sizes by load testing (the estimate in [design](docs/en/01-design.md) follows the official guidelines, and the load tests in the findings are small)
+- Confirming pipe and service sizes by load testing (the estimate in [planning](docs/en/02-planning.md) follows the official guidelines, and the load tests in the findings are small)
 - Changing the `_Default` bucket sink (moving production logs over follows your own change process)
 
 ## License

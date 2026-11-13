@@ -110,7 +110,7 @@ First build the same table or chart from L1 alone, and confirm that the L2 retur
 **Create**
 
 1. Create the typed table and an MV that reads only the matching logs from L0 (the MV takes `_publish_time >= T`).
-2. After T has passed, backfill the rows before T from L0 with `LIMIT 1 BY _message_id`.
+2. After T has passed, backfill the rows before T from L0, one row per message (the `LIMIT 1 BY` expression in `sql/runbooks/08_add_or_rework_l2.sql`).
 3. Register it as a ClickStack log source and point the dashboard tiles at it.
 
 An L2 reads L0, so its MV repeats MV1's noise rules.
@@ -151,7 +151,7 @@ Also avoid dropping and recreating an MV (inserts in between skip it), reusing a
 
 ## Switching from a key to workload identity
 
-ClickPipes can read Pub/Sub with workload identity (Private Preview) instead of a key file (official docs not yet published, [docs PR](https://github.com/ClickHouse/ClickHouse/pull/122828)).
+ClickPipes can read Pub/Sub with workload identity (Beta) instead of a key file ([GCP workload identity](https://clickhouse.com/docs/integrations/clickpipes/security/gcp-workload-identity)).
 You grant permissions to the Google service account ClickPipes manages for the service, and no key has to be created, stored or rotated.
 The feature must be enabled for the organization, and both the ClickHouse Cloud service and ClickPipes must run on GCP.
 
@@ -182,7 +182,7 @@ Those three old resources carry `create_before_destroy`, so the key stays until 
 
 4. Watch the pipe state and L0 ingestion for a few minutes, then delete the old service account's key and role binding.
 
-`clickhousectl` 0.4.2 cannot create workload identity pipes (support is due in the next release).
+`clickhousectl` creates workload identity pipes from 0.5.0 (not tested here; 0.4.2 could not).
 
 ## Changing retention
 
@@ -277,7 +277,7 @@ Days before the fix are rebuilt from L0 into a work table and replaced day by da
   Different types stop with a conversion error, but columns of the same type swap values and succeed.
   Wrap the MV SELECT in a subquery and list the target columns in table order outside it.
 - **L0 keeps Pub/Sub redeliveries as they arrived.**
-  Add `LIMIT 1 BY _message_id` when reading L0.
+  Keep one row per message with `LIMIT 1 BY` when reading L0. The expression in `sql/runbooks/02_rebuild_partition.sql` also keeps rows without a message ID (runbook 10) apart.
   A test without it returned 493 duplicates to L1 for an 8-minute range.
 - **`REPLACE PARTITION` replaces all existing data for the day.**
   Use it only for days whose late arrivals have settled, never for today.
@@ -293,7 +293,7 @@ If the new MV exists before T, every message with `_publish_time` from T on is i
 Messages before T, even if late, are written to the old table by the old MV.
 Set T 5 to 10 minutes after creation.
 
-A LogEntry `timestamp` can be anywhere in the retention window in the past and up to 24 hours in the future, so it cannot be the boundary.
+A LogEntry `timestamp` is set by the writer and can be far in the past or in the future, so it cannot be the boundary.
 
 Backfill into a work table and move it with `MOVE PARTITION`.
 `MOVE PARTITION` does not delete existing data at the destination, so it works for days that already have rows from T on.

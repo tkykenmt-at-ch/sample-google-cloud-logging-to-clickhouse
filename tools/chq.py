@@ -55,7 +55,12 @@ def main():
     for text in texts:
         for k, v in vars_.items():
             text = text.replace("{{" + k + "}}", v)
-        for stmt in statements(text):
+        stmts = list(statements(text))
+        # A placeholder left in a statement would reach the server as literal text: stop before running anything.
+        missing = sorted({m for stmt in stmts for m in re.findall(r"\{\{([A-Za-z0-9_]+)\}\}", re.sub(r"--[^\n]*", "", stmt))})
+        if missing:
+            sys.exit("unresolved variables (pass --var NAME=VALUE): " + ", ".join(missing))
+        for stmt in stmts:
             head = " ".join(stmt.split())[:90]
             code, out = run(a.service, stmt, a.format)
             print(f"-- {head}" + ("" if code == 0 else "  [ERROR]"))

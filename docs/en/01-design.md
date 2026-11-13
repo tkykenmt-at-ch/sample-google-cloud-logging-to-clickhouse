@@ -225,7 +225,7 @@ Treat ClickHouse as a copy for analysis alongside other logs.
 
 **Authentication and network**
 
-- ClickPipes authenticates with a service account key file or with workload identity (Private Preview, official docs not yet published, [docs PR](https://github.com/ClickHouse/ClickHouse/pull/122828)). With workload identity, permissions go to the Google service account ClickPipes manages for the service and no key is created (`clickpipes_auth`). (verified) Either way, grant the official least-privilege role ([Pub/Sub IAM permissions](https://clickhouse.com/docs/integrations/clickpipes/pubsub/auth)) at the project level (`terraform/gcp.tf`); with a key, assign owners for key storage and rotation.
+- ClickPipes authenticates with a service account key file or with workload identity (Beta, [GCP workload identity](https://clickhouse.com/docs/integrations/clickpipes/security/gcp-workload-identity)). With workload identity, permissions go to the Google service account ClickPipes manages for the service and no key is created (`clickpipes_auth`). (verified) Either way, grant the official least-privilege role ([Pub/Sub IAM permissions](https://clickhouse.com/docs/integrations/clickpipes/pubsub/auth)) at the project level (`terraform/gcp.tf`); with a key, assign owners for key storage and rotation.
 - The role allows listing topics and creating, consuming and deleting subscriptions anywhere in the project, because ClickPipes also creates short-lived discovery subscriptions (`clickpipes-discovery-<uuid>`) besides the managed one. To narrow it, put the topic in a project dedicated to log export.
 - If Pub/Sub is inside a VPC Service Controls perimeter, check whether ClickPipes outside the perimeter can read it. (PoC)
 - Place the ClickHouse Cloud service in the same region where the topic stores messages. Crossing regions adds egress charges to delivery. (docs: [pricing](https://cloud.google.com/pubsub/pricing))
@@ -274,13 +274,13 @@ MergeTree, partitioned by publish date, `ORDER BY _publish_time`, 7-day TTL (`la
 | `gcl_logs_1m_v1` (L3, `sql/40_rollup_1m_v1.sql`) | L1 | `Minute`, `ProjectId`, `ServiceName`, `SeverityText`, `HttpStatus`, `Cnt` | AggregatingMergeTree |
 | `gcl_noise_1m_v1` (noise counts, `sql/50_noise_rollup_v1.sql`) | L0 | `Minute`, `ProjectId`, `Rule`, `ServiceName`, `Principal`, `Cnt` | AggregatingMergeTree |
 
-L2 examples are in `sql/examples/` (`audit_events_v1` sorted by principal, `gke_upgrades_v1` for GKE upgrade notifications).
+L2 examples are in `sql/examples/` (`audit_events_v1` sorted by principal, `gke_upgrade_events_v1` for GKE upgrade notifications).
 
 ### L0: landing table
 
 - Columns are only `_message_id`, `_publish_time`, `_attributes`, and `_raw_message`. MergeTree, partitioned by publish date, with a TTL of 7 days from publishing.
 - Size the retention from ingest delay + switch and backfill + reconciliation and rollback, plus margin.
-- Redeliveries stay in L0 as separate rows. When rebuilding from L0, add `LIMIT 1 BY _message_id`.
+- Redeliveries stay in L0 as separate rows. When rebuilding from L0, keep one row per message ID with `LIMIT 1 BY`. Rows copied by runbook 10 have an empty ID, so the key falls back to the LogEntry identity for them; the full expression is in runbooks 02, 03 and 08.
 - L0 can use the Null engine, but then everything that relies on L0 stops working: detecting stuck batches, rebuilding after a parser fix, backfilling an L2, and reverting a noise rule. MergeTree is the default.
 
 ### L1: parsing and the main table
@@ -291,8 +291,9 @@ Compared with one `JSONExtract*` call per field, CPU time was about 1/2.7. (veri
 
 **Time**
 
-- `Timestamp` is the LogEntry `timestamp`; rows without one use `_publish_time`.
-- Cloud Logging accepts timestamps up to 24 hours in the future and back to the bucket's retention ([routing overview](https://cloud.google.com/logging/docs/routing/overview)), so `Timestamp` is not in arrival order. Late logs land in past-date partitions.
+- `Timestamp` is the LogEntry `timestamp` when it lies between 30 days before and 1 day after `_publish_time`. Otherwise, and for rows without one, it is `_publish_time`, and the original value is kept as text in the `entry.timestamp` attribute.
+- A log bucket stores timestamps up to 24 hours in the future and back to the bucket's retention ([routing overview](https://cloud.google.com/logging/docs/routing/overview)), but entries with older timestamps are still routed to sinks ([Cloud Logging limits](https://cloud.google.com/logging/quotas)). The window above is the same range for a bucket with the default 30-day retention. It bounds the number of date partitions one insert can touch and keeps far-future dates out of L1.
+- `Timestamp` is not in arrival order. Late logs land in past-date partitions.
 - `ReceiveTimestamp` (when Cloud Logging received it) and `PublishTime` (when Pub/Sub published it) are kept too.
 
 **ServiceName**
@@ -305,7 +306,7 @@ Compared with one `JSONExtract*` call per field, CPU time was about 1/2.7. (veri
 | Cloud Run jobs | `job/`job name |
 | GCE instance | instance name (instance ID without the label) |
 | GKE control plane | `control-plane/`component |
-| Anything else (including rows above whose label is missing) | resource type/log id (e.g. `k8s_node/kubelet`); the log id alone without a resource type |
+| Anything else (including rows above whose label is missing) | resource type/log id (e.g. `k8s_node/kubelet`); the log id alone without a resource type, the resource type alone without a log id, `unknown` with neither |
 
 Some GCE logs have no instance-name label (`compute.googleapis.com/resource_name`; in the test environment `shielded_vm_integrity`, 4 of 1,663 GCE entries in 6 hours), so one VM appears under two `ServiceName` values, its name and its instance ID.
 
@@ -361,7 +362,7 @@ ClickHouse advises avoiding Nullable because it keeps a separate null marker tha
 | Time absent or unreadable | 1970 | ― | ― | ― |
 
 - Columns cannot tell "missing" from 0, empty, or false. When aggregating HTTP values, for example, restrict to HTTP logs with `HttpMethod != ''`.
-- `Timestamp` falls back to the publish time, so it is never 1970.
+- `Timestamp` falls back to the publish time when the LogEntry timestamp is missing or outside the window, so it is never 1970 or far in the future.
 - In attributes, `mapContains(LogAttributes, 'key')` tells whether a key exists. Audit, `entry.*`, and `http.*` attributes never store empty values.
 - To use an attribute as a number, convert at query time with `toFloat64OrNull(LogAttributes['key'])` so unconvertible values become NULL.
 
@@ -385,7 +386,7 @@ An L2 also reads L0, so it repeats the condition (`sql/examples/l2_audit_events_
 - Column names follow the ClickStack OTel log schema (Timestamp, ServiceName, SeverityText, Body, LogAttributes, ResourceAttributes, ...).
 - Partitioned by date; sort key `(toStartOfFiveMinutes(Timestamp), ServiceName, Timestamp)`, the same as the ClickStack default.
 - For different retention per log kind (long for audit logs, short for application logs), split tables or use row-level TTL.
-- By default one inserted block can touch at most 100 partitions; beyond that the INSERT fails ([max_partitions_per_insert_block](https://clickhouse.com/docs/reference/settings/session-settings/max-partitions)). Where many logs arrive late, monitor ingestion failures.
+- By default one inserted block can touch at most 100 partitions; beyond that the INSERT fails ([max_partitions_per_insert_block](https://clickhouse.com/docs/reference/settings/session-settings/max-partitions)). MV1 keeps `Timestamp` within 30 days before and 1 day after the publish time, so a pipe batch stays far below that limit ("One insert spans too many partitions" in [troubleshooting](08-troubleshooting.md)).
 
 **Japanese search**
 
@@ -406,17 +407,18 @@ Example on about 1.1 million synthetic rows (verified):
 | 2-character n-grams (ngrams(2)) | 92,517 | 70,311 | 15.1 MiB |
 | Reference: counted with LIKE | 92,517 | 70,311 | ― |
 
-- Where logs contain Japanese, index `lower(Body)` with `ngrams(2)`. English words return the same counts. The index is about 4.5 times the size of the word index.
+- Where logs contain Japanese, index `lower(Body)` with `ngrams(2)`. On the synthetic logs, English words returned the same counts as with the word index. The index is about 4.5 times the size of the word index.
 - An expression can have only one text index, so both tokenizers cannot be used at once.
 - One-character words cannot be searched; use SQL LIKE for those.
 - A row matches when it contains every 2-character piece, so other orderings match too: a body containing ムアウトタイム also matches タイムアウト. Use LIKE when an exact count matters. (verified)
+- The same holds for English words and numbers: `error` also matches a body containing "narrow corner of the room", and `404` matches "request took 140ms at 2026-04-04". Short words and numeric IDs can return more rows than the word index would. (verified, clickhouse local 26.7)
 - Without the index (for example with `use_skip_indexes = 0`), Japanese words did not match and returned 0 rows (clickhouse local 26.7). (verified)
 - As in the ClickStack default schema, attributes are indexed on the key list (`mapKeys`) and on `key=value` items (ALIAS columns such as `LogAttributeItems`). With these columns, ClickStack turns attribute filters into `has(LogAttributeItems, 'key=value')` and the index applies. (verified)
 
 ### L3: aggregate tables
 
-- Per-minute counts (by ServiceName, severity, and HTTP status) are built from L1 by an MV. Partition operations on L1 (REPLACE/MOVE PARTITION) do not update them, so rebuild the same day.
-- Per-minute counts of logs dropped by noise rules (by rule, service, and operator) are built directly from L0.
+- Per-minute counts (by project, ServiceName, severity, and HTTP status) are built from L1 by an MV. Partition operations on L1 (REPLACE/MOVE PARTITION) do not update them, so rebuild the same day.
+- Per-minute counts of logs dropped by noise rules (by project, rule, service, and operator) are built directly from L0.
 
 ### L2: typed tables
 
@@ -428,7 +430,7 @@ The examples are in `sql/examples/`:
 
 ### Duplicates
 
-- Duplicates are Pub/Sub redeliveries (same `MessageId`) and the same log exported twice (same `InsertId` and `Timestamp`).
+- Duplicates are Pub/Sub redeliveries (same `MessageId`) and the same log exported twice (same `LogName`, `InsertId` and `Timestamp`).
 - L1 keeps duplicates; only aggregates that must be exact deduplicate by `MessageId` in the query. ClickStack count charts include duplicates.
 - Duplicates are rare in normal operation and increase after a pipe pause or failure. Check them with check 3 in `verify/checks.sql`.
 

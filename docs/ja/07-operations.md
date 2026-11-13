@@ -116,7 +116,7 @@ L2 は任意です。
 **新規作成**
 
 1. 型付きテーブルと、L0 から該当ログだけを読む MV を作る（MV は `_publish_time >= T`）。
-2. T を過ぎたら、T より前の分を L0 から `LIMIT 1 BY _message_id` でバックフィルする。
+2. T を過ぎたら、T より前の分を、L0 からメッセージごとに 1 行にしてバックフィルする（`LIMIT 1 BY` の式は `sql/runbooks/08_add_or_rework_l2.sql`）。
 3. ClickStack にログソースとして登録し、ダッシュボードのタイルの参照先を切り替える。
 
 L2 は L0 を読むので、MV1 のノイズの除外条件を L2 の MV にも書きます。
@@ -167,7 +167,7 @@ MV は INSERT のときしか動かないので、過去分は同じ GROUP BY �
 
 ## 鍵から Workload Identity へ切り替える
 
-ClickPipes は、鍵ファイルの代わりに Workload Identity（Private Preview）で Pub/Sub を読めます（公式資料は未公開、[追加の PR](https://github.com/ClickHouse/ClickHouse/pull/122828)）。
+ClickPipes は、鍵ファイルの代わりに Workload Identity（Beta）で Pub/Sub を読めます（[GCP Workload Identity](https://clickhouse.com/docs/integrations/clickpipes/security/gcp-workload-identity)）。
 ClickPipes がサービスごとに管理する Google のサービスアカウントに権限を付けるだけで、鍵の作成、保管、ローテーションが要らなくなります。
 組織で機能を有効にしてもらう必要があり、ClickHouse Cloud のサービスと ClickPipes が GCP で動いていることが条件です。
 
@@ -202,7 +202,7 @@ ClickPipes がサービスごとに管理する Google のサービスアカウ�
 
 4. 数分間、パイプの状態と L0 への取り込みを確かめてから、古いサービスアカウントの鍵とロールの付与を削除する。
 
-`clickhousectl` 0.4.2 は Workload Identity のパイプを作れません（対応は次の版に入る予定）。
+`clickhousectl` は 0.5.0 から Workload Identity のパイプを作れます（本書では未検証。0.4.2 では作れませんでした）。
 
 ## 保持期間を変える
 
@@ -313,7 +313,8 @@ L1 は共通項目を列として定義し、個別の内容を属性として�
   型が異なれば変換エラーで止まりますが、型が同じ列同士なら値が入れ替わったまま成功します。
   MV の SELECT をサブクエリで包み、外側で書き込み先の列を表の順に並べます。
 - **L0 には Pub/Sub の再配信がそのまま残っています。**
-  L0 を読む段で `LIMIT 1 BY _message_id` を挟みます。
+  L0 を読む段で、`LIMIT 1 BY` でメッセージごとに 1 行にします。
+  `sql/runbooks/02_rebuild_partition.sql` の式は、メッセージ ID のない行（ランブック 10）も分けて残します。
   挟まなかった検証では、8 分間の範囲で 493 件の重複が L1 に戻りました。
 - **`REPLACE PARTITION` は対象日の既存データを丸ごと置き換えます。**
   遅延到着が落ち着いた日にだけ使い、当日には使いません。
@@ -329,7 +330,7 @@ L1 は共通項目を列として定義し、個別の内容を属性として�
 T より前のメッセージは、遅れて届いても旧 MV が旧テーブルへ書きます。
 T は作成時刻の 5〜10 分先にします。
 
-LogEntry の `timestamp` は保持期間内の過去値と最大 24 時間先の未来値を取りうるので、境界には使えません。
+LogEntry の `timestamp` は書き込む側が決める値で、遠い過去や未来の時刻も取りうるので、境界には使えません。
 
 バックフィルは作業用テーブルに作ってから `MOVE PARTITION` で移します。
 `MOVE PARTITION` は移動先の既存データを消さないので、T 以降の行がすでに入っている日でも使えます。

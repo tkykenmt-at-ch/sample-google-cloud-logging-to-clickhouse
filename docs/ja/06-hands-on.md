@@ -31,8 +31,9 @@ WORKDIR=/tmp/gcl-handson verify/local_e2e.sh 20000
 
 1. `loadgen/gen_logentry.py` で、Cloud Logging のシンクが送る形の LogEntry を 2 万件ずつ 2 回生成する。
    1 回目には Kubernetes の Lease の更新（ノイズの例）を 2 割混ぜる。
+   ほかに、ランブック 10 で写した行と同じくメッセージ ID なしで入れる 500 件と、timestamp が 150 の日付にまたがる 150 件も生成する。
 2. `sql/10`〜`sql/50` で L0、L1、L3（分単位の件数）、ノイズの集計テーブルと、それらを作る MV を作る。
-3. 1 回目の分を、ClickPipe と同じ形（生メッセージと Pub/Sub の仮想列）で L0 に入れる。
+3. 1 回目の分と、500 件、150 件を、ClickPipe と同じ形（生メッセージと Pub/Sub の仮想列）で L0 に入れる。
 4. 境界時刻 T を決めて L2 の例（`sql/examples/l2_audit_events_v1.sql`）の MV を作り、2 回目の分を入れる。
    T より前の 1 回目の分は `sql/examples/l2_audit_events_v1_backfill.sql` で L0 からバックフィルする。
 5. 件数を突き合わせる。
@@ -40,19 +41,31 @@ WORKDIR=/tmp/gcl-handson verify/local_e2e.sh 20000
 結果は次のように表示されます（件数は乱数で変わります）。
 
 ```text
-   ┌─check───────────────────────────┬─expected─┬─actual─┬─result─┐
-1. │ L0 rows = generated             │ 40000    │  40000 │ PASS   │
-2. │ L1 rows = L0 rows - noise       │ 35985    │  35985 │ PASS   │
-3. │ Noise counts = noise rows in L0 │ 4015     │   4015 │ PASS   │
-4. │ L3 rollup total = L1 rows       │ 35985    │  35985 │ PASS   │
-5. │ L2 audit rows = L1 audit rows   │ 3559     │   3559 │ PASS   │
-6. │ L2 has no duplicates            │ 3559     │   3559 │ PASS   │
-7. │ ServiceName/Body never empty    │ 0        │      0 │ PASS   │
-8. │ No 1970 timestamps              │ 0        │      0 │ PASS   │
-9. │ Japanese search (index) = LIKE  │ 3079     │   3079 │ PASS   │
-10. │ Stuck-row check ignores noise   │ 0        │      0 │ PASS   │
-11. │ GCE ServiceName is the VM name  │ 0        │      0 │ PASS   │
-   └─────────────────────────────────┴──────────┴────────┴────────┘
+    ┌─check──────────────────────────────┬─expected─┬─actual─┬─result─┐
+ 1. │ L0 rows = generated                │ 40650    │  40650 │ PASS   │
+ 2. │ L1 rows = L0 rows - noise          │ 36565    │  36565 │ PASS   │
+ 3. │ Noise counts = noise rows in L0    │ 4085     │   4085 │ PASS   │
+ 4. │ L3 rollup total = L1 rows          │ 36565    │  36565 │ PASS   │
+ 5. │ L2 audit rows = L1 audit rows      │ 3653     │   3653 │ PASS   │
+ 6. │ L2 has no duplicates               │ 3591     │   3591 │ PASS   │
+ 7. │ ServiceName/Body never empty       │ 0        │      0 │ PASS   │
+ 8. │ No 1970 timestamps                 │ 0        │      0 │ PASS   │
+ 9. │ Japanese search (index) = LIKE     │ 3137     │   3137 │ PASS   │
+10. │ Stuck-row check ignores noise      │ 0        │      0 │ PASS   │
+11. │ GCE ServiceName is the VM name     │ 0        │      0 │ PASS   │
+12. │ Several projects in the input      │ 1        │      1 │ PASS   │
+13. │ L3 per project = L1 per project    │ 0        │      0 │ PASS   │
+14. │ Noise per project = L0 per project │ 0        │      0 │ PASS   │
+15. │ Input has project-number labels    │ 1        │      1 │ PASS   │
+16. │ L1 ProjectId follows LogName       │ 0        │      0 │ PASS   │
+17. │ Noise ProjectId is never a number  │ 0        │      0 │ PASS   │
+18. │ Org and folder logs keep parent    │ 2        │      2 │ PASS   │
+19. │ L1 ProjectId never empty           │ 0        │      0 │ PASS   │
+20. │ Backfill keeps rows without an ID  │ 62       │     62 │ PASS   │
+21. │ Huge key=value bodies are kept     │ 1        │      1 │ PASS   │
+22. │ Timestamps outside window replaced │ 120      │    120 │ PASS   │
+23. │ No Timestamp outside the window    │ 0        │      0 │ PASS   │
+    └────────────────────────────────────┴──────────┴────────┴────────┘
 ```
 
 - 2 と 3：Lease の更新は L1 に入らず、件数だけがノイズの集計テーブルに残ります。
@@ -62,6 +75,11 @@ WORKDIR=/tmp/gcl-handson verify/local_e2e.sh 20000
   合成ログには、別の並びで同じ 2 文字の断片を含む本文がないためです（[設計](01-design.md) の「日本語の検索」）。
 - 10：`verify/checks.sql` の 2 番（L1 に届いていない行）は、ノイズとして外した行を数えません。
 - 11：Compute Engine のログの ServiceName は、VM の名前になります。
+- 12〜19：集計はプロジェクトごとに分かれ、`ProjectId` は `logName` から取ります。
+  ラベルにプロジェクト番号が入っているログでもプロジェクト ID になり、組織とフォルダのログでは親（`organizations/<id>` など）になります。
+- 20：バックフィルは、メッセージ ID のない行も残します。
+- 21：`=` が 1,000 個を超える本文もそのまま残ります（key=value の属性は取り出しません）。
+- 22 と 23：範囲（公開時刻の 30 日前から 1 日後まで）の外の timestamp は公開時刻になるので、150 の日付にまたがる INSERT も L1 に届きます（[トラブルシューティング](08-troubleshooting.md) の「1 回の INSERT がまたぐパーティションが多すぎる」）。
 
 ### 1-3. データとクエリを確認する
 
@@ -185,7 +203,7 @@ python3 tools/chq.py --var LOGS_TTL_DAYS=400 --var MV_DEFINER=default --var T="$
 
 T 以降に公開された監査ログは、MV が L2 に書き込みます。
 T を過ぎてから、T より前の分を L0 からバックフィルします。
-同じファイルの末尾で、L2 と L1 の集計を並べて出します。
+バックフィルのファイルの末尾で、L2 と L1 の集計を並べて出します。
 
 ```bash
 while [[ "$(date -u +"%Y-%m-%d %H:%M:%S")" < "$T" ]]; do sleep 10; done   # T を過ぎるまで待つ
@@ -232,7 +250,8 @@ rm -f sent_ids.txt
 ## 第 3 部：gcloud と clickhousectl で 1 つずつ作る
 
 この部では鍵ファイルで認証します。
-`clickhousectl` 0.4.2 は Workload Identity のパイプを作れないためです（[運用](07-operations.md) の「鍵から Workload Identity へ切り替える」）。
+この部を書いた時点の `clickhousectl` 0.4.2 が、Workload Identity のパイプを作れなかったためです（[運用](07-operations.md) の「鍵から Workload Identity へ切り替える」）。
+0.5.0 以降は作れますが、本書では未検証です。
 
 第 2 部で Terraform が作ったものを、コマンドで 1 つずつ作ります。
 各手順で、何をなぜ作るのかを確かめます。

@@ -106,16 +106,41 @@ DROP と CREATE の間に INSERT されたブロックは、MV を通らずに L
 
 ## 1 回の INSERT がまたぐパーティションが多すぎる
 
+まれにしか起こりません。
+シンクが送るログの timestamp は現在時刻に近いので、パイプの 1 回のバッチが書くパーティションは通常 1 つか 2 つです。
+起こるのは、1 回のバッチの timestamp が 100 を超える日付にまたがる場合です。
+たとえば、ツールが古いログを Logging API で大量に書き込んだ場合や、時計の狂ったクライアントが多数ある場合です。
+範囲外の timestamp が数件混じるだけでは起こりません。
+パーサ v8 以降は、パイプ経由では起こりません。
+
 L1 は `Timestamp` の日付でパーティションを分けます。
 1 回の INSERT の 1 ブロックがまたげるパーティションは既定で 100 までで、超えると INSERT が失敗します（[max_partitions_per_insert_block](https://clickhouse.com/docs/reference/settings/session-settings/max-partitions)）。
-L1 への INSERT は MV が行うので、失敗は MV のエラーと同じ扱いになり、パイプは同じバッチを再試行し続けると考えられます（MV の別の例外での挙動からの推定、この例外では未検証）。
+L1 への INSERT は MV が行うので、失敗すると MV のほかの例外と同じくバッチが止まります。
 
 Cloud Logging は、古いタイムスタンプのエントリーも API で受け付け、ログバケットには保存せずシンクへ送ります（[Cloud Logging の上限](https://cloud.google.com/logging/quotas)）。
-保持期間（L1 の TTL）の長さとは関係なく、1 回のバッチの中の `Timestamp` が 100 を超える日付にまたがると起こります。
+範囲を絞らない場合、保持期間（L1 の TTL）の長さとは関係なく、1 回のバッチの中の `Timestamp` が 100 を超える日付にまたがると起こります。
 
+パーサ v8 から、MV1 は LogEntry の timestamp を公開時刻の 30 日前から 1 日後までに限って使い、範囲の外は公開時刻にします。
+1 回のバッチが書くパーティションは多くても 32 ほどに収まります。
+ノイズの MV と L2 の例も同じ規則です。
+
+- clickhouse local 26.7 で、150 の日付にまたがる 1 回の INSERT を試しました。
+  v7 では `Too many partitions for single INSERT block` で失敗し、行は L0 に残って L1 には 1 行も届きませんでした。
+  v8 では全行が L1 に届きました（`verify/local_e2e.sh` の 22 番と 23 番）。
+- ClickHouse Cloud 26.8 の Pub/Sub のパイプで、同じ 150 件を 1 回で公開しました。
+  v8 では全行が L1 に届き、日付は 31 に収まり、パイプは Running のままでした。
+  v7 での失敗は、パイプでは再現していません。
+- timestamp を置き換えた行には、元の文字列が `entry.timestamp` 属性に残ります。
 - 14 番で、1 回の INSERT が L1 のいくつのパーティションに書いたかを見ます。
 - 4 番の遅延到着は直近 8 日分の `Timestamp` だけを読むので、それより古い `Timestamp` は数えません。
-- 起きた場合は、MV で極端に古い `Timestamp` を公開時刻に置き換えるか除外する対処が考えられます（未検証）。
+
+**パーサ v7 以前で作った環境**
+
+`sql/30` と `sql/50` は `CREATE MATERIALIZED VIEW IF NOT EXISTS` なので、もう一度実行しても（`terraform apply` を含む）既存の MV は変わりません。
+[運用](07-operations.md) の付録 A1 と同じく、`ALTER TABLE ... MODIFY QUERY` で新しい SELECT に入れ替えます。
+対象は、`gcl.gcl_logs_v1_mv`（`sql/30_logs_v1_mv.sql`）、`gcl.gcl_noise_1m_v1_mv`（`sql/50_noise_rollup_v1.sql`）、L0 を読む L2 の MV です。
+追加したノイズの除外条件は残します。
+書き込んでいるパーサの版は 5 番で確かめます。
 
 ## パーツの数
 

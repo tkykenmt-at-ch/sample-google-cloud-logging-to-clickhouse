@@ -367,7 +367,7 @@ ClickPipes workload identity (Private Preview) was tested in the test environmen
 | Switching from a key with Terraform (v3.37.0, with `create_before_destroy`) | Order: workload identity binding, pipe update, then removal of the old key, binding and service account (about 25 seconds). Across the three switches, all 4,800 messages sent arrived in L0. 400 redelivery duplicates in L0 and L1; distinct `MessageId`s in L1 matched at 4,800. `terraform destroy` removed 8 resources and left nothing |
 | Main pipe of the test environment | Switched with PATCH and stayed Running for 5 minutes. The old key and binding were deleted about 22 minutes later; ingestion continued |
 | In the browser (steps 5 and 7 of [Setup in the browser](05-setup-console.md)) | Choosing "Workload identity" under "Authentication method" showed the service account to grant. After granting the custom role with "Grant access" in IAM, the connection check and the topic list passed. Running about 30 seconds after creation; the 3,800 synthetic messages sent after creation arrived in L0 and L1 with no loss |
-| `clickhousectl` | 0.4.2 (2026-09-03) requires a key file and cannot create workload identity pipes; support is in unreleased changes |
+| `clickhousectl` | 0.4.2 (2026-09-03) requires a key file and cannot create workload identity pipes. 0.5.0 (2026-10-22) added support (not tested here) |
 
 ## Not tested
 

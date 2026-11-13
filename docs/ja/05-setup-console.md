@@ -111,7 +111,8 @@ IAM & Admin の Roles で「Create role」を開き、Title、Description、ID �
 ## 5. ClickPipes の認証を用意する
 
 ClickPipes がトピックを読む方法は、サービスアカウントの鍵ファイル（既定）か、Workload Identity です。
-Workload Identity は Private Preview で、組織で有効にしてもらう必要があります。
+Workload Identity は Beta です。
+サービスが対応していない場合は、ClickHouse のサポートに問い合わせます（[GCP Workload Identity](https://clickhouse.com/docs/integrations/clickpipes/security/gcp-workload-identity)）。
 有効なら、鍵を作らず、保管とローテーションも要らないので、こちらを選びます。
 
 ### Workload Identity を使う場合
@@ -199,7 +200,7 @@ JSON の各項目（`insertId` など）は対応付けないままにします�
 
 **Details and settings**：Permissions で「Only destination」を選び、「Create ClickPipe」を押します。
 
-レプリカは既定で最小の大きさ（XS）が 1 つで、処理できるのは約 7 MB/s です。
+レプリカは既定で最小の大きさ（XS）が 1 つで、処理できるのは推定で約 7 MB/s です。
 本番のログを流す前に、[計画](02-planning.md) の「大きさの見積もり方」で決めた大きさと数（2 つ以上）に、Settings → Advanced Settings → Scaling で変えます。
 
 ![権限](../images/console/06g_clickpipe_details.png)

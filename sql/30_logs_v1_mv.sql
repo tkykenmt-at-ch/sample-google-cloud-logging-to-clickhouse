@@ -2,7 +2,7 @@
 -- per field (2.7x less CPU on real audit-heavy logs, 3.7x on synthetic mixed logs).
 -- Only non-throwing functions are used: an exception here blocks the batch (see runbooks/05).
 -- SQL SECURITY DEFINER lets the ClickPipe run with "Only destination" (INSERT on L0 only).
--- Parser v7: the LogEntry envelope is fixed (columns), the payload is open (attributes). Nothing assumes a
+-- Parser v8: the LogEntry envelope is fixed (columns), the payload is open (attributes). Nothing assumes a
 -- specific log type: audit fields are added only for AuditLog payloads, envelope fields without a column go to
 -- entry.* / http.* / operation.* attributes, and ServiceName / Body always fall back to something non-empty.
 CREATE MATERIALIZED VIEW IF NOT EXISTS gcl.gcl_logs_v1_mv TO gcl.gcl_logs_v1
@@ -66,6 +66,12 @@ WITH
                           JSONExtract(JSONExtractRaw(_raw_message, 'operation'), 'Map(String, String)')))) AS op_map,
     tupleElement(e, 'sourceLocation') AS src,
     parseDateTime64BestEffortOrZero(tupleElement(e, 'timestamp'), 9, 'UTC') AS ts_parsed,
+    -- Timestamp is the LogEntry timestamp only within 30 days before and 1 day after the publish time (the
+    -- window Cloud Logging applies to a log bucket with the default retention); otherwise, and when it is missing
+    -- or unparsable, the publish time. L1 is partitioned by date and one insert can touch at most 100 partitions
+    -- (max_partitions_per_insert_block), so unbounded timestamps could block the batch; a far-future one would
+    -- also leave a partition the TTL never drops. The same rule is in sql/50, sql/examples and runbook 07.
+    ts_parsed BETWEEN _publish_time - INTERVAL 30 DAY AND _publish_time + INTERVAL 1 DAY AS ts_ok,
     decodeURLComponent(extract(log_name, '/logs/(.+)$')) AS log_id,
     -- Body: the first readable summary; never empty.
     multiIf(
@@ -85,13 +91,13 @@ WITH
     extractKeyValuePairs(if(position(body, '="') > 0 AND countSubstrings(body, '=') <= 1000, body, ''), '=', ' ', '"') AS kv,
     mapConcat(mapApply((k, v) -> (concat('kv.', k), v), kv),
               -- A number with one unit (Go durations); anything else (e.g. 1m2s) gets no kv.latency_ms.
-              if(match(kv['latency'], '^[0-9.]+(ns|us|µs|ms|s)$'),
+              if(match(kv['latency'], '^[0-9]+(\\.[0-9]+)?(ns|us|µs|ms|s)$'),
                  map('kv.latency_ms', toString(round(toFloat64OrZero(extract(kv['latency'], '^([0-9.]+)'))
                      * multiIf(endsWith(kv['latency'], 'ns'), 0.000001, endsWith(kv['latency'], 'us') OR endsWith(kv['latency'], 'µs'), 0.001,
                                endsWith(kv['latency'], 'ms'), 1, 1000), 6))),
                  map())) AS kv_map
 SELECT
-    if(ts_parsed > toDateTime64('2000-01-01 00:00:00', 9, 'UTC'), ts_parsed, toDateTime64(_publish_time, 9, 'UTC')) AS Timestamp,
+    if(ts_ok, ts_parsed, toDateTime64(_publish_time, 9, 'UTC')) AS Timestamp,
     parseDateTime64BestEffortOrZero(tupleElement(e, 'receiveTimestamp'), 9, 'UTC') AS ReceiveTimestamp,
     _publish_time AS PublishTime,
     now64(3) AS InsertedAt,
@@ -146,10 +152,12 @@ SELECT
     tupleElement(e, 'insertId') AS InsertId,
     _message_id AS MessageId,
     isValidJSON(_raw_message) AS ParseOk,
-    7 AS ParserVersion,
+    8 AS ParserVersion,
     mapConcat(res_labels, map('resource.type', res_type)) AS ResourceAttributes,
     mapConcat(mapApply((k, v) -> (concat('labels.', k), v), entry_labels), json_map, audit_map, kv_map,
-              entry_map, http_map, op_map, if(proto_type != '', map('proto.type', proto_type), map())) AS LogAttributes
+              entry_map, http_map, op_map, if(proto_type != '', map('proto.type', proto_type), map()),
+              -- A replaced timestamp is kept as text, so the rows can be found and the original value read.
+              if(NOT ts_ok AND tupleElement(e, 'timestamp') != '', map('entry.timestamp', tupleElement(e, 'timestamp')), map())) AS LogAttributes
 FROM gcl.gcl_landing_v1
 -- Noise rule (kept as per-minute counts by sql/50_noise_rollup_v1.sql instead of rows).
 WHERE tupleElement(audit, 'methodName') != 'io.k8s.coordination.v1.leases.update';

@@ -278,7 +278,7 @@ ClickHouse は、他のログと合わせて分析するための写しとして
 
 **認証とネットワーク**
 
-- ClickPipes の認証は、サービスアカウントの鍵ファイルか、Workload Identity（Private Preview、公式資料は未公開、[追加の PR](https://github.com/ClickHouse/ClickHouse/pull/122828)）です。
+- ClickPipes の認証は、サービスアカウントの鍵ファイルか、Workload Identity（Beta、[GCP Workload Identity](https://clickhouse.com/docs/integrations/clickpipes/security/gcp-workload-identity)）です。
   Workload Identity では、ClickPipes がサービスごとに管理する Google のサービスアカウントに権限を付け、鍵を作りません（`clickpipes_auth`）。（確認済み）
   どちらの場合も、公式の最小権限ロール（[Pub/Sub IAM permissions](https://clickhouse.com/docs/integrations/clickpipes/pubsub/auth)）をプロジェクト単位で付けます（`terraform/gcp.tf`）。
   鍵を使う場合は、鍵の保管とローテーションの担当を決めます。
@@ -335,7 +335,7 @@ MergeTree、公開日でパーティション、`ORDER BY _publish_time`、保�
 | `gcl_logs_1m_v1`（L3、`sql/40_rollup_1m_v1.sql`） | L1 | `Minute`、`ProjectId`、`ServiceName`、`SeverityText`、`HttpStatus`、`Cnt` | AggregatingMergeTree |
 | `gcl_noise_1m_v1`（ノイズの件数、`sql/50_noise_rollup_v1.sql`） | L0 | `Minute`、`ProjectId`、`Rule`、`ServiceName`、`Principal`、`Cnt` | AggregatingMergeTree |
 
-L2 の例は `sql/examples/` にあります（`audit_events_v1` は操作者の順、`gke_upgrades_v1` は GKE のアップグレード通知）。
+L2 の例は `sql/examples/` にあります（`audit_events_v1` は操作者の順、`gke_upgrade_events_v1` は GKE のアップグレード通知）。
 
 ### L0：着地テーブル
 
@@ -343,7 +343,9 @@ L2 の例は `sql/examples/` にあります（`audit_events_v1` は操作者の
   MergeTree で、公開日でパーティションを分け、保持期限（TTL）を公開から 7 日にします。
 - 保持日数は、取り込みの遅延、切り替えとバックフィル、照合とロールバックに必要な日数に余裕を加えて決めます。
 - L0 には再配信の重複が別の行として残ります。
-  L0 から作り直すときは `LIMIT 1 BY _message_id` を挟みます。
+  L0 から作り直すときは、`LIMIT 1 BY` でメッセージ ID ごとに 1 行にします。
+  ランブック 10 で入れた行はメッセージ ID が空なので、その行は LogEntry の識別子（logName、insertId、timestamp）で分けます。
+  式の全文はランブック 02、03、08 にあります。
 - Null エンジンにもできますが、そうすると L0 を使う仕組みがすべて使えなくなります。
   処理が停滞したバッチの監視、解析を直した後の作り直し、L2 のバックフィル、ノイズの除外条件の取り消しです。
   既定は MergeTree とします。
@@ -357,9 +359,13 @@ LogEntry の共通項目は `JSONExtract(_raw_message, 'Tuple(...)')` でまと�
 
 **時刻**
 
-- `Timestamp` は LogEntry の `timestamp` です。
-  ない行は `_publish_time` で補います。
-- Cloud Logging は 24 時間先までの未来の時刻と、バケットの保持期間内の過去の時刻を受け付けるので（[ルーティングの概要](https://cloud.google.com/logging/docs/routing/overview)）、`Timestamp` は到着順に並びません。
+- `Timestamp` は、LogEntry の `timestamp` が `_publish_time` の 30 日前から 1 日後までにあるとき、その値です。
+  範囲の外の行と `timestamp` のない行は `_publish_time` にし、元の値は文字列のまま `entry.timestamp` 属性に残します。
+- ログバケットが保存するのは、24 時間先までの未来の時刻と、バケットの保持期間内の過去の時刻です（[ルーティングの概要](https://cloud.google.com/logging/docs/routing/overview)）。
+  それより古い時刻のエントリーも、シンクへは送られます（[Cloud Logging の上限](https://cloud.google.com/logging/quotas)）。
+  上の範囲は、保持期間が既定の 30 日のバケットと同じ範囲です。
+  1 回の INSERT が書く日付パーティションの数を抑え、遠い未来の日付を L1 に入れないために設けています。
+- `Timestamp` は到着順に並びません。
   遅れて届いたログは過去の日付のパーティションに入ります。
 - `ReceiveTimestamp`（Cloud Logging の受信時刻）と `PublishTime`（Pub/Sub の公開時刻）も持ちます。
 
@@ -373,7 +379,7 @@ LogEntry の共通項目は `JSONExtract(_raw_message, 'Tuple(...)')` でまと�
 | Cloud Run のジョブ | `job/`ジョブ名 |
 | GCE インスタンス | インスタンス名（ラベルがなければインスタンス ID） |
 | GKE のコントロールプレーン | `control-plane/`コンポーネント名 |
-| 上記以外（各行のラベルがない場合も含む） | リソースの種類/ログ ID（例 `k8s_node/kubelet`）。リソースの種類がなければログ ID |
+| 上記以外（各行のラベルがない場合も含む） | リソースの種類/ログ ID（例 `k8s_node/kubelet`）。リソースの種類がなければログ ID、ログ ID がなければリソースの種類、どちらもなければ `unknown` |
 
 GCE のログには、インスタンス名のラベル（`compute.googleapis.com/resource_name`）を持たないものがあり（検証環境では `shielded_vm_integrity`、6 時間で 1,663 件中 4 件）、同じ VM が名前とインスタンス ID の 2 つの `ServiceName` に分かれます。
 
@@ -443,7 +449,7 @@ ClickStack の既定スキーマも Nullable を使っていません。
 
 - 列では「値がない」と「0、空、false」を区別できません。
   例えば HTTP の値を集計するときは、`HttpMethod != ''` などで HTTP のログに絞ります。
-- `Timestamp` は、読めなければ公開時刻で補うので 1970 年にはなりません。
+- `Timestamp` は、読めないときと範囲の外のときに公開時刻で補うので、1970 年や遠い未来の日付にはなりません。
 - 属性では `mapContains(LogAttributes, 'キー')` で、そのキーがあるかを見分けられます。
   監査ログ、`entry.*`、`http.*` の属性は、空の値を入れません。
 - 属性の値を数値として使うときは、検索時に `toFloat64OrNull(LogAttributes['キー'])` のように変換すると、変換できない値を NULL として扱えます。
@@ -472,7 +478,7 @@ L2 も L0 から読むので、同じ条件を書きます（`sql/examples/l2_au
 - ログの種類ごとに保持期間を変えたい場合（監査ログは長く、アプリのログは短く）は、テーブルを分けるか、行ごとの TTL を使います。
 - 1 回の INSERT の 1 ブロックがまたげるパーティションは、既定で 100 までです。
   超えると INSERT が失敗します（[max_partitions_per_insert_block](https://clickhouse.com/docs/reference/settings/session-settings/max-partitions)）。
-  遅れて届くログが多い環境では、取り込みの失敗を監視します。
+  MV1 は `Timestamp` を公開時刻の 30 日前から 1 日後までに収めるので、パイプの 1 回のバッチはこの上限に届きません（[トラブルシューティング](08-troubleshooting.md) の「1 回の INSERT がまたぐパーティションが多すぎる」）。
 
 **日本語の検索**
 
@@ -496,7 +502,7 @@ ClickStack は、検索窓に入れた語を `hasAllTokens(lower(Body), lower('�
 | 参考：LIKE で数えた件数 | 92,517 件 | 70,311 件 | ― |
 
 - 日本語のログがある環境では、`lower(Body)` のインデックスを `ngrams(2)` にします。
-  英語の語も同じ件数で検索できます。
+  合成ログでは、英語の語も単語単位の区切りと同じ件数でした。
   インデックスの容量は、単語単位の区切りの約 4.5 倍になります。
 - 1 つの式に付けられるテキストインデックスは 1 つまでなので、両方の区切り方を同時には使えません。
 - 1 文字だけの語は検索できません。
@@ -505,6 +511,10 @@ ClickStack は、検索窓に入れた語を `hasAllTokens(lower(Body), lower('�
   例えば「ムアウトタイム」を含む本文も「タイムアウト」に一致します。
   件数を厳密に数えるときは、LIKE で確かめます。
   （確認済み）
+- 英語の語と数字でも同じことが起こります。
+  `error` は "narrow corner of the room" を含む本文に、`404` は "request took 140ms at 2026-04-04" を含む本文に一致します。
+  短い語や数字の ID では、単語単位の区切りより多くの行が返ることがあります。
+  （確認済み、clickhouse local 26.7）
 - インデックスを使わずに実行すると（`use_skip_indexes = 0` を指定した場合など）、日本語の語は一致せず 0 件になりました（clickhouse local 26.7）。
   （確認済み）
 - 属性のインデックスは、ClickStack の既定スキーマと同じく、キーの一覧（`mapKeys`）と「キー=値」の組（`LogAttributeItems` などの ALIAS 列）に付けます。
@@ -513,9 +523,9 @@ ClickStack は、検索窓に入れた語を `hasAllTokens(lower(Body), lower('�
 
 ### L3：集計テーブル
 
-- 分単位の件数（ServiceName、重大度、HTTP ステータス別）を L1 から MV で作ります。
+- 分単位の件数（プロジェクト、ServiceName、重大度、HTTP ステータス別）を L1 から MV で作ります。
   L1 にパーティション操作（REPLACE/MOVE PARTITION）をしたときは自動で更新されないので、同じ日を作り直します。
-- ノイズの除外条件で除いたログの分単位の件数（規則名、サービス名、操作者別）を、L0 から直接作ります。
+- ノイズの除外条件で除いたログの分単位の件数（プロジェクト、規則名、サービス名、操作者別）を、L0 から直接作ります。
 
 ### L2：型付きテーブル
 
@@ -529,7 +539,7 @@ L2 は任意です。
 
 ### 重複の扱い
 
-- 重複には、Pub/Sub の再配信（同じ `MessageId`）と、同じログの二重送出（同じ `InsertId` と `Timestamp`）があります。
+- 重複には、Pub/Sub の再配信（同じ `MessageId`）と、同じログの二重送出（同じ `LogName`、`InsertId`、`Timestamp`）があります。
 - L1 には重複を残し、件数を正確に数えたい集計だけ、クエリで `MessageId` ごとに 1 件にします。
   ClickStack の件数グラフは重複を含んだまま数えます。
 - 平常時の重複はごく少なく、パイプの一時停止や障害の後に増えます。

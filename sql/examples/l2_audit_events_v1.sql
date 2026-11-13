@@ -36,7 +36,7 @@ WITH
     tupleElement(e, 'protoPayload') AS p,
     parseDateTime64BestEffortOrZero(tupleElement(e, 'timestamp'), 9, 'UTC') AS ts
 SELECT
-    if(ts > toDateTime64('2000-01-01 00:00:00', 9, 'UTC'), ts, toDateTime64(_publish_time, 9, 'UTC')) AS Timestamp,
+    if(ts BETWEEN _publish_time - INTERVAL 30 DAY AND _publish_time + INTERVAL 1 DAY, ts, toDateTime64(_publish_time, 9, 'UTC')) AS Timestamp,
     _publish_time AS PublishTime,
     _message_id AS MessageId,
     -- Same rule as MV1: from logName only

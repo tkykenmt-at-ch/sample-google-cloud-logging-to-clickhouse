@@ -27,7 +27,7 @@ WITH
             ({{COND}}) AND _publish_time >= toDateTime64('{{T}}', 3, 'UTC'), '{{RULE}}',
             '') AS rule
 SELECT
-    toStartOfMinute(if(ts > toDateTime64('2000-01-01 00:00:00', 3, 'UTC'), ts, _publish_time)) AS Minute,
+    toStartOfMinute(if(ts BETWEEN _publish_time - INTERVAL 30 DAY AND _publish_time + INTERVAL 1 DAY, ts, _publish_time)) AS Minute,
     if(startsWith(tupleElement(e, 'logName'), 'projects/'), extract(tupleElement(e, 'logName'), '^projects/([^/]+)/'), extract(tupleElement(e, 'logName'), '^([^/]+/[^/]+)/')) AS ProjectId,
     rule AS Rule,
     tupleElement(p, 'serviceName') AS ServiceName,

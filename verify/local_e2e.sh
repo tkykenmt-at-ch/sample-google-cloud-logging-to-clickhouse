@@ -36,6 +36,17 @@ for f in sql/10_landing_v1.sql sql/20_logs_v1.sql sql/30_logs_v1_mv.sql sql/40_r
 done
 load "$W/a.jsonl"
 load "$W/c.jsonl" noid
+# One insert whose timestamps fall on 150 dates (one in 2100, the others 0.5 to 149.5 days old). L1 is
+# partitioned by date and accepts at most 100 partitions per insert, so MV1 must replace the timestamps
+# outside its window (30 days before to 1 day after the publish time) with the publish time.
+NW=150
+ch -q "INSERT INTO gcl.gcl_landing_v1 (_message_id, _publish_time, _attributes, _raw_message)
+       SELECT toString(generateUUIDv4()), now64(3), map(),
+              concat('{\"logName\":\"projects/window-test/logs/app\",\"insertId\":\"w', toString(number),
+                     '\",\"textPayload\":\"timestamp window\",\"timestamp\":\"',
+                     if(number = 0, '2100-01-01T00:00:00Z',
+                        formatDateTime(now() - toIntervalDay(number) + toIntervalHour(12), '%Y-%m-%dT%H:%i:%SZ', 'UTC')), '\"}')
+       FROM numbers($NW)"
 
 # Optional L2 added later, with a boundary T: batch b arrives after T, batch a is backfilled from L0.
 sleep 1
@@ -83,9 +94,12 @@ WITH
   (SELECT count() FROM gcl.gcl_logs_v1 WHERE ProjectId != if(startsWith(LogName, 'projects/'), extract(LogName, '^projects/([^/]+)/'), extract(LogName, '^([^/]+/[^/]+)/'))) AS l1_project_mismatch,
   (SELECT uniqExactIf(ProjectId, ProjectId LIKE '%/%') FROM gcl.gcl_logs_v1) AS l1_parents,
   (SELECT countIf(ProjectId = '') FROM gcl.gcl_logs_v1) AS l1_project_empty,
-  (SELECT count() FROM gcl.gcl_noise_1m_v1 WHERE match(ProjectId, '^[0-9]+$')) AS noise_project_number
+  (SELECT count() FROM gcl.gcl_noise_1m_v1 WHERE match(ProjectId, '^[0-9]+$')) AS noise_project_number,
+  -- 30 of the 150 timestamps are inside the window; the other 120 become the publish time and keep the original as text
+  (SELECT countIf(Timestamp = PublishTime AND mapContains(LogAttributes, 'entry.timestamp')) FROM gcl.gcl_logs_v1 WHERE ProjectId = 'window-test') AS ts_replaced,
+  (SELECT countIf(Timestamp NOT BETWEEN PublishTime - INTERVAL 30 DAY AND PublishTime + INTERVAL 1 DAY) FROM gcl.gcl_logs_v1) AS ts_outside
 SELECT check, expected, actual, if(expected = actual, 'PASS', 'FAIL') AS result FROM (
-  SELECT 1 AS n, 'L0 rows = generated'    AS check, toUInt64($N * 2 + $NC) AS expected, l0 AS actual UNION ALL
+  SELECT 1 AS n, 'L0 rows = generated'    AS check, toUInt64($N * 2 + $NC + $NW) AS expected, l0 AS actual UNION ALL
   SELECT 2, 'L1 rows = L0 rows - noise',          l0 - lease_l0,       l1 UNION ALL
   SELECT 3, 'Noise counts = noise rows in L0',    lease_l0,            lease_counted UNION ALL
   SELECT 4, 'L3 rollup total = L1 rows',          l1,                  l3 UNION ALL
@@ -105,7 +119,9 @@ SELECT check, expected, actual, if(expected = actual, 'PASS', 'FAIL') AS result 
   SELECT 18, 'Org and folder logs keep parent',   toUInt64(2),                   l1_parents UNION ALL
   SELECT 19, 'L1 ProjectId never empty',          toUInt64(0),                   l1_project_empty UNION ALL
   SELECT 20, 'Backfill keeps rows without an ID', audit_l1_noid,                 audit_l2_noid UNION ALL
-  SELECT 21, 'Huge key=value bodies are kept',    toUInt64(1),                   toUInt64(kv_flood > 0)
+  SELECT 21, 'Huge key=value bodies are kept',    toUInt64(1),                   toUInt64(kv_flood > 0) UNION ALL
+  SELECT 22, 'Timestamps outside window replaced', toUInt64(120),                ts_replaced UNION ALL
+  SELECT 23, 'No Timestamp outside the window',   toUInt64(0),                   ts_outside
 )
 ORDER BY n
 FORMAT PrettyCompactMonoBlock"

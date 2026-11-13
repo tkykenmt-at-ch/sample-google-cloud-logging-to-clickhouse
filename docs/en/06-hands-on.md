@@ -26,28 +26,40 @@ WORKDIR=/tmp/gcl-handson verify/local_e2e.sh 20000
 
 The script:
 
-1. Generates two batches of 20,000 LogEntry messages shaped like a Cloud Logging sink's output with `loadgen/gen_logentry.py`. The first batch mixes in 20% Kubernetes Lease updates (the noise example).
+1. Generates two batches of 20,000 LogEntry messages shaped like a Cloud Logging sink's output with `loadgen/gen_logentry.py`. The first batch mixes in 20% Kubernetes Lease updates (the noise example). It also generates 500 entries that are loaded without a message ID, as runbook 10 copies them, and 150 entries whose timestamps fall on 150 dates.
 2. Creates L0, L1, MV1, L3 (per-minute counts), and the noise counts from `sql/10` to `sql/50`.
-3. Loads the first batch into L0 the way the ClickPipe writes it (raw message plus Pub/Sub virtual columns).
+3. Loads the first batch, the 500 entries and the 150 entries into L0 the way the ClickPipe writes it (raw message plus Pub/Sub virtual columns).
 4. Picks a boundary time T, creates the MV of the L2 example (`sql/examples/l2_audit_events_v1.sql`), and loads the second batch. The first batch, published before T, is backfilled from L0 with `sql/examples/l2_audit_events_v1_backfill.sql`.
 5. Reconciles the counts.
 
 The output looks like this (counts vary with the random data):
 
 ```text
-   ┌─check───────────────────────────┬─expected─┬─actual─┬─result─┐
-1. │ L0 rows = generated             │ 40000    │  40000 │ PASS   │
-2. │ L1 rows = L0 rows - noise       │ 35985    │  35985 │ PASS   │
-3. │ Noise counts = noise rows in L0 │ 4015     │   4015 │ PASS   │
-4. │ L3 rollup total = L1 rows       │ 35985    │  35985 │ PASS   │
-5. │ L2 audit rows = L1 audit rows   │ 3559     │   3559 │ PASS   │
-6. │ L2 has no duplicates            │ 3559     │   3559 │ PASS   │
-7. │ ServiceName/Body never empty    │ 0        │      0 │ PASS   │
-8. │ No 1970 timestamps              │ 0        │      0 │ PASS   │
-9. │ Japanese search (index) = LIKE  │ 3079     │   3079 │ PASS   │
-10. │ Stuck-row check ignores noise   │ 0        │      0 │ PASS   │
-11. │ GCE ServiceName is the VM name  │ 0        │      0 │ PASS   │
-   └─────────────────────────────────┴──────────┴────────┴────────┘
+    ┌─check──────────────────────────────┬─expected─┬─actual─┬─result─┐
+ 1. │ L0 rows = generated                │ 40650    │  40650 │ PASS   │
+ 2. │ L1 rows = L0 rows - noise          │ 36565    │  36565 │ PASS   │
+ 3. │ Noise counts = noise rows in L0    │ 4085     │   4085 │ PASS   │
+ 4. │ L3 rollup total = L1 rows          │ 36565    │  36565 │ PASS   │
+ 5. │ L2 audit rows = L1 audit rows      │ 3653     │   3653 │ PASS   │
+ 6. │ L2 has no duplicates               │ 3591     │   3591 │ PASS   │
+ 7. │ ServiceName/Body never empty       │ 0        │      0 │ PASS   │
+ 8. │ No 1970 timestamps                 │ 0        │      0 │ PASS   │
+ 9. │ Japanese search (index) = LIKE     │ 3137     │   3137 │ PASS   │
+10. │ Stuck-row check ignores noise      │ 0        │      0 │ PASS   │
+11. │ GCE ServiceName is the VM name     │ 0        │      0 │ PASS   │
+12. │ Several projects in the input      │ 1        │      1 │ PASS   │
+13. │ L3 per project = L1 per project    │ 0        │      0 │ PASS   │
+14. │ Noise per project = L0 per project │ 0        │      0 │ PASS   │
+15. │ Input has project-number labels    │ 1        │      1 │ PASS   │
+16. │ L1 ProjectId follows LogName       │ 0        │      0 │ PASS   │
+17. │ Noise ProjectId is never a number  │ 0        │      0 │ PASS   │
+18. │ Org and folder logs keep parent    │ 2        │      2 │ PASS   │
+19. │ L1 ProjectId never empty           │ 0        │      0 │ PASS   │
+20. │ Backfill keeps rows without an ID  │ 62       │     62 │ PASS   │
+21. │ Huge key=value bodies are kept     │ 1        │      1 │ PASS   │
+22. │ Timestamps outside window replaced │ 120      │    120 │ PASS   │
+23. │ No Timestamp outside the window    │ 0        │      0 │ PASS   │
+    └────────────────────────────────────┴──────────┴────────┴────────┘
 ```
 
 - 2 and 3: Lease updates stay out of L1 and only their counts remain in the noise table.
@@ -56,6 +68,10 @@ The output looks like this (counts vary with the random data):
 - 9: the 2-character n-gram index finds 「タイムアウト」 ("timeout") in as many rows as LIKE does, because the synthetic logs contain no body with the same 2-character pieces in another order ([Design](01-design.md), "Japanese search").
 - 10: check 2 of `verify/checks.sql` (rows that never reached L1) does not count rows dropped as noise.
 - 11: the ServiceName of Compute Engine logs is the VM name.
+- 12 to 19: the rollups keep projects apart, and `ProjectId` comes from `logName`: the project ID even where a label holds the project number, and the parent for organization and folder logs.
+- 20: the backfill keeps the rows without a message ID.
+- 21: a body with more than 1,000 `=` is kept; no key=value attributes are extracted from it.
+- 22 and 23: timestamps outside the window (30 days before to 1 day after the publish time) become the publish time, so the insert with 150 dates reaches L1 ([Troubleshooting](08-troubleshooting.md), "One insert spans too many partitions").
 
 ### 1-3. Look inside
 
@@ -221,7 +237,7 @@ Clean up here before part 3 as well (part 3 uses the same database `gcl`).
 
 ## Part 3: build it one piece at a time with gcloud and clickhousectl
 
-This part authenticates with a key file, because `clickhousectl` 0.4.2 cannot create workload identity pipes ("Switching from a key to workload identity" in [Operations](07-operations.md)).
+This part authenticates with a key file: it was written with `clickhousectl` 0.4.2, which cannot create workload identity pipes (0.5.0 and later can; not tested here) ("Switching from a key to workload identity" in [Operations](07-operations.md)).
 
 Build what Terraform created in part 2 with commands, one resource at a time.
 Each step says what it creates and why.

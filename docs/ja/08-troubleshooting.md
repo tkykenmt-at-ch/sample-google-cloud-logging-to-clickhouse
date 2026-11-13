@@ -106,6 +106,13 @@ DROP と CREATE の間に INSERT されたブロックは、MV を通らずに L
 
 ## 1 回の INSERT がまたぐパーティションが多すぎる
 
+まれにしか起こりません。
+シンクが送るログの timestamp は現在時刻に近いので、パイプの 1 回のバッチが書くパーティションは通常 1 つか 2 つです。
+起こるのは、1 回のバッチの timestamp が 100 を超える日付にまたがる場合です。
+たとえば、ツールが古いログを Logging API で大量に書き込んだ場合や、時計の狂ったクライアントが多数ある場合です。
+範囲外の timestamp が数件混じるだけでは起こりません。
+パーサ v8 以降は、パイプ経由では起こりません。
+
 L1 は `Timestamp` の日付でパーティションを分けます。
 1 回の INSERT の 1 ブロックがまたげるパーティションは既定で 100 までで、超えると INSERT が失敗します（[max_partitions_per_insert_block](https://clickhouse.com/docs/reference/settings/session-settings/max-partitions)）。
 L1 への INSERT は MV が行うので、失敗すると MV のほかの例外と同じくバッチが止まります。
@@ -120,7 +127,9 @@ Cloud Logging は、古いタイムスタンプのエントリーも API で受�
 - clickhouse local 26.7 で、150 の日付にまたがる 1 回の INSERT を試しました。
   v7 では `Too many partitions for single INSERT block` で失敗し、行は L0 に残って L1 には 1 行も届きませんでした。
   v8 では全行が L1 に届きました（`verify/local_e2e.sh` の 22 番と 23 番）。
-  ClickHouse Cloud のパイプでは未検証です。
+- ClickHouse Cloud 26.8 の Pub/Sub のパイプで、同じ 150 件を 1 回で公開しました。
+  v8 では全行が L1 に届き、日付は 31 に収まり、パイプは Running のままでした。
+  v7 での失敗は、パイプでは再現していません。
 - timestamp を置き換えた行には、元の文字列が `entry.timestamp` 属性に残ります。
 - 14 番で、1 回の INSERT が L1 のいくつのパーティションに書いたかを見ます。
 - 4 番の遅延到着は直近 8 日分の `Timestamp` だけを読むので、それより古い `Timestamp` は数えません。

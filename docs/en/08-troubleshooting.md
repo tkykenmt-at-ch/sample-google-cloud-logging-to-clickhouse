@@ -91,13 +91,16 @@ Blocks inserted between DROP and CREATE skip the MV and stay only in L0.
 
 ## One insert spans too many partitions
 
+This is rare. Logs routed by a sink carry timestamps close to the current time, so one pipe batch normally touches one or two partitions. It takes one batch with timestamps on more than 100 dates, for example a tool that writes a large amount of old logs through the Logging API, or many clients with broken clocks. A few stray timestamps do not cause it. From parser version 8 it cannot happen through the pipe.
+
 L1 is partitioned by the date of `Timestamp`. By default one block of one insert can span at most 100 partitions; beyond that the insert fails ([max_partitions_per_insert_block](https://clickhouse.com/docs/reference/settings/session-settings/max-partitions)). The MV performs the insert into L1, so the failure blocks the batch like any other MV exception.
 
 Cloud Logging accepts entries with old timestamps through the API and routes them to sinks without storing them in log buckets ([Cloud Logging limits](https://cloud.google.com/logging/quotas)). Without a bound, the failure happens when the `Timestamp` values within one batch fall on more than 100 dates, regardless of the L1 retention (TTL).
 
 From parser version 8, MV1 uses the LogEntry timestamp only between 30 days before and 1 day after the publish time, and the publish time otherwise. One pipe batch then touches about 32 partitions at most. The noise MV and the L2 examples apply the same rule.
 
-- On clickhouse local 26.7, one insert with timestamps on 150 dates failed with `Too many partitions for single INSERT block` under parser version 7 (rows in L0, none in L1) and reached L1 in full under version 8 (`verify/local_e2e.sh`, checks 22 and 23). Not tested with a pipe on ClickHouse Cloud.
+- On clickhouse local 26.7, one insert with timestamps on 150 dates failed with `Too many partitions for single INSERT block` under parser version 7 (rows in L0, none in L1) and reached L1 in full under version 8 (`verify/local_e2e.sh`, checks 22 and 23).
+- On ClickHouse Cloud 26.8 with a Pub/Sub pipe, the same 150 messages published in one request reached L1 in full under version 8, on 31 dates, and the pipe stayed Running. The failure under version 7 was not reproduced with a pipe.
 - Rows whose timestamp was replaced have the `entry.timestamp` attribute with the original text.
 - Check 14 shows how many L1 partitions one insert wrote.
 - Check 4 (late arrivals) reads only `Timestamp` within the last 8 days, so it does not count older timestamps.

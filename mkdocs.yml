@@ -64,6 +64,7 @@ plugins:
             Operations: 運用
             Troubleshooting: トラブルシューティング
             Findings: 検証記録
+            Query patterns: よくあるクエリ
 
 nav:
   - Home: index.md
@@ -76,6 +77,7 @@ nav:
   - Operations: 07-operations.md
   - Troubleshooting: 08-troubleshooting.md
   - Findings: 09-findings.md
+  - Query patterns: 10-query-patterns.md
 
 markdown_extensions:
   - admonition

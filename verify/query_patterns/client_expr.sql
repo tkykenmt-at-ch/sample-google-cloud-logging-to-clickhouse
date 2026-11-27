@@ -1,0 +1,1 @@
+multiIf(HttpUserAgent = '', '', match(HttpUserAgent, '(?i)bot|crawler|spider'), 'crawler', position(HttpUserAgent, 'Edg/') > 0, 'Edge', position(HttpUserAgent, 'Firefox/') > 0, 'Firefox', position(HttpUserAgent, 'Chrome/') > 0, 'Chrome', position(HttpUserAgent, 'Safari/') > 0, 'Safari', 'other')

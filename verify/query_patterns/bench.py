@@ -8,7 +8,7 @@ Every run carries SETTINGS log_comment='qp:<case>:<run>', use_query_condition_ca
 import json, os, subprocess, sys, time
 
 CHQ = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "tools", "chq.py")
-BOT = open(os.path.join(os.path.dirname(__file__), "bot_expr.sql")).read().strip()
+CLIENT = open(os.path.join(os.path.dirname(__file__), "client_expr.sql")).read().strip()
 
 D1 = "Timestamp >= '2026-11-23 00:00:00' AND Timestamp < '2026-11-24 00:00:00' AND toStartOfFiveMinutes(Timestamp) >= '2026-11-23 00:00:00' AND toStartOfFiveMinutes(Timestamp) < '2026-11-24 00:00:00'"
 D3 = "Timestamp >= '2026-11-22 00:00:00' AND Timestamp < '2026-11-25 00:00:00' AND toStartOfFiveMinutes(Timestamp) >= '2026-11-22 00:00:00' AND toStartOfFiveMinutes(Timestamp) < '2026-11-25 00:00:00'"
@@ -28,17 +28,17 @@ CASES = {
     "p1c_combined":    f"SELECT countIf(Body LIKE '%タイムアウト%') AS err, count() AS total FROM tune.logs WHERE {D1} AND {APP}",
     "p1c_split_total": f"SELECT count() FROM tune.logs WHERE {D1} AND {APP}",
     # 2. Filter on the ORDER BY key (ServiceName)
-    "p2_noservice":    f"SELECT toStartOfHour(Timestamp) h, count() FROM tune.logs WHERE {D1} AND HttpUrl LIKE '%utm_source=chatgpt%' GROUP BY h ORDER BY h",
-    "p2_service":      f"SELECT toStartOfHour(Timestamp) h, count() FROM tune.logs WHERE {D1} AND {LB} AND HttpUrl LIKE '%utm_source=chatgpt%' GROUP BY h ORDER BY h",
+    "p2_noservice":    f"SELECT toStartOfHour(Timestamp) h, count() FROM tune.logs WHERE {D1} AND HttpUrl LIKE '%/search/%' GROUP BY h ORDER BY h",
+    "p2_service":      f"SELECT toStartOfHour(Timestamp) h, count() FROM tune.logs WHERE {D1} AND {LB} AND HttpUrl LIKE '%/search/%' GROUP BY h ORDER BY h",
     # 3. Chart-style counts over 3 days
     "p3_countif":      f"SELECT toStartOfHour(Timestamp) h, countIf(SeverityText = 'ERROR') FROM tune.logs WHERE {D3} GROUP BY h ORDER BY h",
     "p3_where":        f"SELECT toStartOfHour(Timestamp) h, count() FROM tune.logs WHERE {D3} AND SeverityText = 'ERROR' GROUP BY h ORDER BY h",
     "p3_rollup":       "SELECT toStartOfHour(Timestamp) h, sum(count__) FROM tune.logs_1m WHERE Timestamp >= '2026-11-22 00:00:00' AND Timestamp < '2026-11-25 00:00:00' AND SeverityText = 'ERROR' GROUP BY h ORDER BY h",
-    # 4. Bot and page analysis on the load balancer logs (1 day)
-    "p4_raw":          f"SELECT {BOT} AS bot, path(HttpUrl) AS page, count() n, countIf(HttpStatus = 200) ok FROM tune.logs WHERE {D1} AND {LB} GROUP BY bot, page ORDER BY n DESC LIMIT 20",
-    "p4_matcol":       f"SELECT Bot AS bot, UrlPath AS page, count() n, countIf(HttpStatus = 200) ok FROM tune.logs WHERE {D1} AND {LB} GROUP BY bot, page ORDER BY n DESC LIMIT 20",
-    "p4s_raw":         f"SELECT {BOT} AS bot, splitByChar('/', path(HttpUrl))[2] AS section, count() n FROM tune.logs WHERE {D1} AND {LB} GROUP BY bot, section ORDER BY bot, section",
-    "p4s_rollup":      "SELECT Bot AS bot, Section AS section, sum(count__) n FROM tune.http_1h WHERE Timestamp >= '2026-11-23 00:00:00' AND Timestamp < '2026-11-24 00:00:00' GROUP BY bot, section ORDER BY bot, section",
+    # 4. Client-type and page analysis on the load balancer logs (1 day)
+    "p4_raw":          f"SELECT {CLIENT} AS client, path(HttpUrl) AS page, count() n, countIf(HttpStatus = 200) ok FROM tune.logs WHERE {D1} AND {LB} GROUP BY client, page ORDER BY n DESC LIMIT 20",
+    "p4_matcol":       f"SELECT Client AS client, UrlPath AS page, count() n, countIf(HttpStatus = 200) ok FROM tune.logs WHERE {D1} AND {LB} GROUP BY client, page ORDER BY n DESC LIMIT 20",
+    "p4s_raw":         f"SELECT {CLIENT} AS client, splitByChar('/', path(HttpUrl))[2] AS section, count() n FROM tune.logs WHERE {D1} AND {LB} GROUP BY client, section ORDER BY client, section",
+    "p4s_rollup":      "SELECT Client AS client, Section AS section, sum(count__) n FROM tune.http_1h WHERE Timestamp >= '2026-11-23 00:00:00' AND Timestamp < '2026-11-24 00:00:00' GROUP BY client, section ORDER BY client, section",
 }
 
 

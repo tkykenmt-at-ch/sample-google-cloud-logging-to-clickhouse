@@ -64,7 +64,7 @@ python3 tools/cost_inputs.py --project <project> --topic <topic> --service <serv
 |---|---|
 | Cloud Monitoring, list of Pub/Sub subscriptions | Monitoring Viewer (`roles/monitoring.viewer`) and Pub/Sub Viewer (`roles/pubsub.viewer`) on the project |
 | ClickHouse Cloud usage (usageCost) | An API key that can read the organization's billing |
-| ClickHouse Cloud Prometheus endpoint | An API key that can read the service |
+| List of ClickPipes (`clickhousectl cloud clickpipe list`) | An API key that can read the service |
 | System tables | Queries on the service (`clickhousectl cloud service query`) |
 
 **Inputs**
@@ -77,7 +77,7 @@ python3 tools/cost_inputs.py --project <project> --topic <topic> --service <serv
 | B8 | Pub/Sub delivery bytes billed (GiB/day) | `pubsub.googleapis.com/subscription/byte_cost`, summed over every subscription that reads the topic | Same. After a month of parallel running, compare with the "Message Delivery Basic" SKU on the bill |
 | B9 | Billable Cloud Logging volume (GiB/month) | `logging.googleapis.com/billing/bytes_ingested` (whole project) | Usage of the "Log Storage cost" SKU in the billing report |
 | B10, B12, B13 | Service compute, storage, backups (USD/day, list price of the current plan) | ClickHouse Cloud usage API (`clickhousectl cloud org usage`) | Console → Settings → Usage breakdown ([tracking spending](https://clickhouse.com/docs/products/cloud/reference/billing/billing-overview#how-can-i-keep-track-of-my-spending)) |
-| B17 | Total ClickPipes replica units | `ClickPipes_Replica_MemoryLimit` from the Prometheus endpoint (one unit per 8 GiB) | Size and count under the pipe's Settings → Advanced Settings → Scaling |
+| B17 | Total ClickPipes replica units | Replica size × count of each running pipe, from the ClickPipes API (one unit per 8 GiB) | Size and count under the pipe's Settings → Advanced Settings → Scaling |
 
 The daily values from the Cloud Monitoring PromQL API matched daily sums from the Monitoring v3 API (verified).
 In our tests, delivery bytes billed were about 1.6 times the publish bytes, because acks and ack deadline extensions are counted too.

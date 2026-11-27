@@ -8,7 +8,7 @@ Every run carries SETTINGS log_comment='qp:<case>:<run>', use_query_condition_ca
 import json, os, subprocess, sys, time
 
 CHQ = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "tools", "chq.py")
-BOT = open(os.path.join(os.path.dirname(__file__), "bot_expr.txt")).read().strip()
+BOT = open(os.path.join(os.path.dirname(__file__), "bot_expr.sql")).read().strip()
 
 D1 = "Timestamp >= '2026-11-23 00:00:00' AND Timestamp < '2026-11-24 00:00:00' AND toStartOfFiveMinutes(Timestamp) >= '2026-11-23 00:00:00' AND toStartOfFiveMinutes(Timestamp) < '2026-11-24 00:00:00'"
 D3 = "Timestamp >= '2026-11-22 00:00:00' AND Timestamp < '2026-11-25 00:00:00' AND toStartOfFiveMinutes(Timestamp) >= '2026-11-22 00:00:00' AND toStartOfFiveMinutes(Timestamp) < '2026-11-25 00:00:00'"

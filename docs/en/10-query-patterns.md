@@ -178,7 +178,8 @@ ClickStack ignores an MV and reads the source table when ([Limitations in the of
 Points for design and operation:
 
 - Register 20 or fewer MVs per source; around 10 is the usual target (an official recommendation; ClickStack does not enforce a limit). Every time it renders a chart, ClickStack runs `EXPLAIN ESTIMATE` for each registered MV and picks the one that reads the fewest rows.
-- Estimate the ingestion load separately from the registered count. In one ClickPipes INSERT, every chained MV runs inside the same INSERT: L0 to L1, then L1 to the aggregate tables. With this guide's standard set, MV1, the noise counts and L3 run, plus any L2 you add.
+- Estimate the ingestion load separately from the registered count. In one INSERT of a Pub/Sub pipe, every chained MV runs inside the same INSERT: L0 to L1, then L1 to the aggregate tables. With this guide's standard set, MV1, the noise counts and L3 run, plus any L2 you add.
+- A Cloud Storage pipe writes into a staging table and then moves the partitions, so an added MV or a `MODIFY QUERY` takes effect only after the pipe is stopped and started again, with no error. After the restart the chain reached the aggregate tables beyond L1 (test service, 26.8).
 - Naming aggregate columns `<function>__<source column>` (`count__` for counts) lets ClickStack fill in the column mapping on the registration screen. Map other columns by hand there. This guide's `gcl_logs_1m_v1` (L3) uses `Minute` and `Cnt`, so it needs the manual mapping; left to inference, `Cnt` is taken as a sum, not a count.
 - `REPLACE PARTITION` and `MOVE PARTITION` do not fire MVs. When you rebuild L1, rebuild the same partitions of the MV's aggregate table too ([operations](07-operations.md)).
 - When an MV throws, the batch does not reach L1 either, and the pipe stops after about 60 minutes if the MV is not fixed ([findings](09-findings.md#when-an-mv-throws)). Run a new MV definition locally or on a test service before adding it.

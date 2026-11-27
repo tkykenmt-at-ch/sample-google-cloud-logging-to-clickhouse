@@ -5,7 +5,7 @@ Reads, for each day of the period:
 - Google Cloud Monitoring (PromQL API, Application Default Credentials): Pub/Sub publish and delivery bytes
   billed for the topic and every subscription that reads it, and the billable Cloud Logging volume.
 - ClickHouse Cloud API (clickhousectl): compute, storage and backup cost per day (usageCost).
-- ClickHouse Cloud Prometheus endpoint (API key): ClickPipes replica size and count.
+- ClickHouse Cloud API (clickhousectl): the size and replica count of each running ClickPipe.
 - The service's system tables (clickhousectl service query): stored size per table, CPU time by kind of work,
   hourly CPU and memory use, and text index sizes.
 
@@ -18,7 +18,7 @@ Credentials: `gcloud auth application-default login`; clickhousectl's stored cre
 CLICKHOUSE_CLOUD_API_KEY / CLICKHOUSE_CLOUD_API_SECRET (the key needs to read billing for usageCost).
 Run it from a directory without another ./.clickhouse/credentials.json (see tools/chq.py).
 """
-import argparse, base64, datetime as dt, json, os, statistics, subprocess, sys, urllib.parse, urllib.request
+import argparse, datetime as dt, json, os, statistics, subprocess, sys, urllib.parse, urllib.request
 
 GIB = 2**30
 MONTH_DAYS = 30.42
@@ -62,19 +62,6 @@ def sql(service, query):
     if r.returncode:
         raise RuntimeError((r.stdout + r.stderr).strip().splitlines()[0])
     return [json.loads(l) for l in r.stdout.splitlines() if l.startswith("{")]
-
-
-def api_key():
-    k, s = os.environ.get("CLICKHOUSE_CLOUD_API_KEY"), os.environ.get("CLICKHOUSE_CLOUD_API_SECRET")
-    if not (k and s):
-        for path in (".clickhouse/credentials.json", os.path.expanduser("~/.clickhouse/credentials.json")):
-            if os.path.exists(path):
-                c = json.load(open(path))
-                k, s = c.get("api_key"), c.get("api_secret")
-                break
-    if not (k and s):
-        raise RuntimeError("no ClickHouse Cloud API key (set CLICKHOUSE_CLOUD_API_KEY and CLICKHOUSE_CLOUD_API_SECRET)")
-    return base64.b64encode(f"{k}:{s}".encode()).decode()
 
 
 def step(name, fn):
@@ -151,17 +138,21 @@ def main():
                 daily[day]["storage_usd"] = c["metrics"].get("storageCHC", 0.0)
                 daily[day]["backup_usd"] = c["metrics"].get("backupCHC", 0.0)
 
-    units = None
-    if org:
-        def pipe_units():
-            url = f"https://api.clickhouse.cloud/v1/organizations/{org}/services/{a.service}/prometheus?filtered_metrics=false"
-            req = urllib.request.Request(url, headers={"Authorization": f"Basic {api_key()}"})
-            text = urllib.request.urlopen(req, timeout=60).read().decode()
-            mem = [float(l.rsplit(" ", 1)[1]) for l in text.splitlines() if l.startswith("ClickPipes_Replica_MemoryLimit{")]
-            if not mem:
-                raise RuntimeError("no ClickPipes_Replica_MemoryLimit series (is a pipe running?)")
-            return sum(mem) / GIB / 8, len(mem)  # one ClickPipes compute unit per 8 GiB of replica memory
-        units = step("ClickPipes replicas (Prometheus endpoint)", pipe_units)
+    def pipe_units():
+        # One ClickPipes compute unit per 8 GiB of replica memory (XS 0.0625, S 0.125, M 0.25, L 0.5, XL 1.0).
+        # Billing follows the configured size and replica count, so read them from the ClickPipes API.
+        pipes = ch("clickpipe", "list", a.service)
+        pipes = pipes if isinstance(pipes, list) else pipes.get("result", [])
+        running = [p for p in pipes if p.get("state") in ("Running", "Provisioning")]
+        if not running:
+            raise RuntimeError("no running ClickPipe on the service")
+        rows = []
+        for p in running:
+            sc = p.get("scaling") or {}
+            replicas = sc.get("replicas") or 1  # object storage pipes report no replica count
+            rows.append((p.get("name"), next(iter(p.get("source", {})), "?"), replicas, sc.get("replicaMemoryGb", 0) * replicas / 8))
+        return sum(r[3] for r in rows), sum(r[2] for r in rows), rows
+    units = step("ClickPipes replicas (ClickPipes API)", pipe_units)
 
     # System tables
     s = a.service
@@ -220,7 +211,9 @@ def main():
         print("\nCPU hours per day, by kind of work (all replicas)")
         for r in cpu:
             print(f"  {r['kind']:<45}{r['cpu_hours_per_day']:>8.2f}  {r['cpu_hours_per_day'] / total:>5.0%}")
-    if use:
+    if use and use[0].get("avg_cores") is None:
+        missing.append("system.metric_log: no rows for the period (CPU and memory per replica not shown)")
+    elif use:
         u = use[0]
         print(f"\nCPU and memory per replica ({u['replicas']} replicas): average {u['avg_cores']:.2f} cores, "
               f"p99 {u['p99_cores']:.2f} cores, peak memory {u['max_mem_gib']:.1f} GiB")
@@ -229,6 +222,8 @@ def main():
               + ", ".join(f"{r['name']} {r['gb']:.1f} GB" for r in idx))
     if units:
         print(f"\nClickPipes: {units[1]} replicas, {units[0]:g} compute units in total")
+        for name, src, replicas, u in units[2]:
+            print(f"  {name} ({src}): {replicas} replicas, {u:g} units")
 
     # Cells of docs/files/cost_estimate.csv
     def cell(v, fmt="{:.2f}"):

@@ -78,7 +78,7 @@ python3 tools/cost_inputs.py --project <project> --topic <topic> --service <serv
 |---|---|
 | Cloud Monitoring、Pub/Sub のサブスクリプション一覧 | プロジェクトの Monitoring 閲覧者（`roles/monitoring.viewer`）と Pub/Sub 閲覧者（`roles/pubsub.viewer`） |
 | ClickHouse Cloud の使用量（usageCost） | 組織の請求を読める API キー |
-| ClickHouse Cloud の Prometheus のエンドポイント | サービスを読める API キー |
+| ClickPipes の一覧（`clickhousectl cloud clickpipe list`） | サービスを読める API キー |
 | system テーブル | サービスへのクエリ（`clickhousectl cloud service query`） |
 
 **取るもの**
@@ -91,7 +91,7 @@ python3 tools/cost_inputs.py --project <project> --topic <topic> --service <serv
 | B8 | Pub/Sub の配信の計上量（GiB/日） | `pubsub.googleapis.com/subscription/byte_cost` を、トピックを読む全部のサブスクリプションで足す | 同上。並走が 1 か月を超えたら、請求の SKU「Message Delivery Basic」と比べる |
 | B9 | Cloud Logging の課金対象の量（GiB/月） | `logging.googleapis.com/billing/bytes_ingested`（プロジェクト全体） | 請求のレポートの SKU「Log Storage cost」の使用量 |
 | B10、B12、B13 | サービスの計算資源、ストレージ、バックアップ（USD/日、今のプランの定価） | ClickHouse Cloud の使用量の API（`clickhousectl cloud org usage`） | Console の Settings → Usage breakdown（[使用量の確認](https://clickhouse.com/docs/products/cloud/reference/billing/billing-overview#how-can-i-keep-track-of-my-spending)） |
-| B17 | ClickPipes のレプリカの合計ユニット | Prometheus のエンドポイントの `ClickPipes_Replica_MemoryLimit`（8 GiB で 1 ユニット） | パイプの Settings → Advanced Settings → Scaling の大きさと数 |
+| B17 | ClickPipes のレプリカの合計ユニット | ClickPipes の API が返す、動いているパイプのレプリカの大きさ × 数（8 GiB で 1 ユニット） | パイプの Settings → Advanced Settings → Scaling の大きさと数 |
 
 Cloud Monitoring の PromQL の API が返す 1 日分の値は、Monitoring の v3 API で 1 日ごとに合計した値と一致しました（確認済み）。
 検証では、配信の計上量は公開の約 1.6 倍でした（ack と ack 期限の延長も計上されるため）。

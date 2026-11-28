@@ -88,6 +88,7 @@ gcloud と clickhousectl で 1 つずつ作りながら仕組みを確かめる�
 | [トラブルシューティング](docs/ja/08-troubleshooting.md) | 取り込みの遅れ、MV のエラー、1 回の INSERT がまたぐパーティション、パーツの数を、症状から切り分ける手順 |
 | [検証記録](docs/ja/09-findings.md) | 実機で確かめた挙動と数値 |
 | [よくあるクエリと速い書き方](docs/ja/10-query-patterns.md) | LIKE と全文検索、並び順の列での絞り込み、グラフの条件、取り込み時の列、MV と ClickStack での制約を、計測結果と並べたもの |
+| [運用中のチューニング](docs/ja/11-advanced-tuning.md) | 遅いクエリの見つけ方、最新 N 件の並べ方、クエリ条件キャッシュ、ID の索引、属性の列への取り出し、過去の行への反映、利用者ごとの上限、サービスの分離、マージの負荷を、症状から引けるようにしたもの |
 
 <details>
 <summary><b>ディレクトリ構成</b></summary>
@@ -102,6 +103,7 @@ gcloud と clickhousectl で 1 つずつ作りながら仕組みを確かめる�
 | `verify/local_e2e.sh` | ローカルの ClickHouse で SQL 一式を通して確認する |
 | `verify/completeness.sh` | 公開したメッセージ ID の全件と L0、L1 を突き合わせる |
 | `verify/query_patterns/` | [よくあるクエリ](docs/ja/10-query-patterns.md) の計測に使った合成ログの生成と計測のスクリプト |
+| `verify/advanced_tuning/` | [運用中のチューニング](docs/ja/11-advanced-tuning.md) の計測に使ったテーブルと索引の SQL |
 | `docs/files/cost_estimate.csv` | 費用の見積もりの表計算のひな形（英語版は `cost_estimate.en.csv`）。ドキュメントサイトからもダウンロードできる |
 | `verify/checks.sql` | 遅延、処理が停滞したバッチ、重複、遅延到着、解析の状態、滞留、パイプの INSERT、パーツの数などの定期確認 |
 | `tools/chq.py` | SQL ファイルを 1 文ずつ `clickhousectl cloud service query` で実行する |

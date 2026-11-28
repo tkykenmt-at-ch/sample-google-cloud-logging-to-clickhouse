@@ -78,6 +78,7 @@ nav:
   - Troubleshooting: 08-troubleshooting.md
   - Findings: 09-findings.md
   - Query patterns: 10-query-patterns.md
+  - Tuning in operation: 11-advanced-tuning.md
 
 markdown_extensions:
   - admonition

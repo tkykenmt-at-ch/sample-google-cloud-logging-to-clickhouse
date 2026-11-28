@@ -88,6 +88,7 @@ The same documents are also on the [docs site](https://tkykenmt-at-ch.github.io/
 | [Troubleshooting](docs/en/08-troubleshooting.md) | Narrowing down ingest delay, MV failures, inserts spanning too many partitions, and part counts from the symptom |
 | [Findings](docs/en/09-findings.md) | Observed behavior and measurements |
 | [Query patterns](docs/en/10-query-patterns.md) | LIKE versus full-text search, filtering on the sort key, chart conditions, columns computed at insert time, and MVs with their ClickStack constraints, each with measurements |
+| [Tuning in operation](docs/en/11-advanced-tuning.md) | Finding slow queries, sorting the latest N rows, the query condition cache, indexes for ID lookups, copying attributes into columns, filling existing rows, per-user limits, separate services, and merge load, organized by symptom |
 
 <details>
 <summary><b>Repository layout</b></summary>
@@ -102,6 +103,7 @@ The same documents are also on the [docs site](https://tkykenmt-at-ch.github.io/
 | `verify/local_e2e.sh` | End-to-end check of the SQL on a local ClickHouse |
 | `verify/completeness.sh` | Reconciles every published message ID with L0 and L1 |
 | `verify/query_patterns/` | Synthetic log generator and benchmark used for the [query patterns](docs/en/10-query-patterns.md) |
+| `verify/advanced_tuning/` | Tables and index SQL used for [tuning in operation](docs/en/11-advanced-tuning.md) |
 | `docs/files/cost_estimate.en.csv` | Spreadsheet template for the cost estimate (Japanese: `cost_estimate.csv`); also downloadable from the docs site |
 | `verify/checks.sql` | Periodic checks: latency, stuck batches, duplicates, late arrivals, parser health, backlog, pipe inserts, part counts |
 | `tools/chq.py` | Runs SQL files one statement at a time through `clickhousectl cloud service query` |

@@ -13,6 +13,7 @@ CLIENT = open(os.path.join(os.path.dirname(__file__), "client_expr.sql")).read()
 D1 = "Timestamp >= '2026-11-23 00:00:00' AND Timestamp < '2026-11-24 00:00:00' AND toStartOfFiveMinutes(Timestamp) >= '2026-11-23 00:00:00' AND toStartOfFiveMinutes(Timestamp) < '2026-11-24 00:00:00'"
 D3 = "Timestamp >= '2026-11-22 00:00:00' AND Timestamp < '2026-11-25 00:00:00' AND toStartOfFiveMinutes(Timestamp) >= '2026-11-22 00:00:00' AND toStartOfFiveMinutes(Timestamp) < '2026-11-25 00:00:00'"
 APP = "ServiceName = 'k8s_container/app-a'"
+LOOKUP_ID = "7AFA42487929F0A1"   # an InsertId of the 2026-11-23 rows
 LB = "ServiceName = 'http_load_balancer/web-frontend'"
 
 CASES = {
@@ -39,6 +40,27 @@ CASES = {
     "p4_matcol":       f"SELECT Client AS client, UrlPath AS page, count() n, countIf(HttpStatus = 200) ok FROM tune.logs WHERE {D1} AND {LB} GROUP BY client, page ORDER BY n DESC LIMIT 20",
     "p4s_raw":         f"SELECT {CLIENT} AS client, splitByChar('/', path(HttpUrl))[2] AS section, count() n FROM tune.logs WHERE {D1} AND {LB} GROUP BY client, section ORDER BY client, section",
     "p4s_rollup":      "SELECT Client AS client, Section AS section, sum(count__) n FROM tune.http_1h WHERE Timestamp >= '2026-11-23 00:00:00' AND Timestamp < '2026-11-24 00:00:00' GROUP BY client, section ORDER BY client, section",
+    # 7. Latest N rows: ORDER BY that matches the sorting key reads in order
+    "t1_ts_desc":      f"SELECT Timestamp, SeverityText, Body FROM tune.logs WHERE {D1} AND {APP} ORDER BY Timestamp DESC LIMIT 200",
+    "t1_key_desc":     f"SELECT Timestamp, SeverityText, Body FROM tune.logs WHERE {D1} AND {APP} ORDER BY toStartOfFiveMinutes(Timestamp) DESC, Timestamp DESC LIMIT 200",
+    "t1_tuple_desc":   f"SELECT Timestamp, SeverityText, Body FROM tune.logs WHERE {D1} AND {APP} ORDER BY (toStartOfFiveMinutes(Timestamp), Timestamp) DESC LIMIT 200",
+    "t1_star_ts":      f"SELECT * FROM tune.logs WHERE {D1} AND {APP} ORDER BY Timestamp DESC LIMIT 200",
+    "t1_star_key":     f"SELECT * FROM tune.logs WHERE {D1} AND {APP} ORDER BY toStartOfFiveMinutes(Timestamp) DESC, Timestamp DESC LIMIT 200",
+    "t1_word_ts":      f"SELECT Timestamp, Body FROM tune.logs WHERE {D3} AND hasAllTokens(lower(Body), 'timeout') ORDER BY Timestamp DESC LIMIT 200",
+    "t1_word_key":     f"SELECT Timestamp, Body FROM tune.logs WHERE {D3} AND hasAllTokens(lower(Body), 'timeout') ORDER BY toStartOfFiveMinutes(Timestamp) DESC, Timestamp DESC LIMIT 200",
+    # 8. Point lookups and skip indexes on the one-day copy (verify/advanced_tuning/10_copy_day.sql, 30_indexes.sql)
+    "t2_id_none":      f"SELECT Timestamp, Body FROM tune.logs_d WHERE InsertId = '{LOOKUP_ID}' SETTINGS ignore_data_skipping_indices = 'idx_insert_bf', optimize_use_projections = 0",
+    "t2_id_bloom":     f"SELECT Timestamp, Body FROM tune.logs_d WHERE InsertId = '{LOOKUP_ID}' SETTINGS optimize_use_projections = 0",
+    "t2_id_proj":      f"SELECT Timestamp, Body FROM tune.logs_d WHERE InsertId = '{LOOKUP_ID}' SETTINGS ignore_data_skipping_indices = 'idx_insert_bf'",
+    "t2_sev_none":     "SELECT count() FROM tune.logs_d WHERE SeverityText = 'ERROR' SETTINGS ignore_data_skipping_indices = 'idx_sev_set'",
+    "t2_sev_set":      "SELECT count() FROM tune.logs_d WHERE SeverityText = 'ERROR'",
+    # 9. Map attributes versus a column filled at insert time (verify/advanced_tuning/20_attrs.sql, 40_attr_column.sql)
+    "t3_map_basic":    "SELECT LogAttributes['http.route'] AS r, count() FROM tune.attrs_basic GROUP BY r ORDER BY r",
+    "t3_map_buckets":  "SELECT LogAttributes['http.route'] AS r, count() FROM tune.attrs_buckets GROUP BY r ORDER BY r",
+    "t3_column":       "SELECT HttpRoute AS r, count() FROM tune.attrs_buckets GROUP BY r ORDER BY r",
+    "t3_filter_basic": "SELECT count() FROM tune.attrs_basic WHERE LogAttributes['user_id'] = '12345'",
+    "t3_filter_buckets": "SELECT count() FROM tune.attrs_buckets WHERE LogAttributes['user_id'] = '12345'",
+    "t3_filter_column": "SELECT count() FROM tune.attrs_buckets WHERE UserId = '12345'",
 }
 
 
@@ -58,7 +80,8 @@ def main():
     first = {}
     for run in (1, 2, 3):
         for k, sql in cases.items():
-            r = q(f"{sql} SETTINGS log_comment = 'qp:{tag}:{k}:{run}', use_query_condition_cache = 0")
+            extra = f"log_comment = 'qp:{tag}:{k}:{run}', use_query_condition_cache = 0"
+            r = q(f"{sql}, {extra}" if " SETTINGS " in sql else f"{sql} SETTINGS {extra}")
             if run == 1:
                 first[k] = r.strip().splitlines()[1:3]
     time.sleep(10)

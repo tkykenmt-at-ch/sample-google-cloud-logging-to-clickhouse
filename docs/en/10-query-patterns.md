@@ -5,6 +5,7 @@ English | [日本語](../ja/10-query-patterns.md)
 This page sets typical log search and aggregation queries side by side with a faster way to write them.
 It separates the patterns a rewrite of the query fixes from those that need a change on the table side (columns computed at insert time, or a materialized view (MV)).
 The figures come from synthetic logs ([test conditions](#test-conditions)).
+How to find slow queries after go-live, and the indexes and columns you can add later, are in [tuning in operation](11-advanced-tuning.md).
 
 ## Summary
 
